@@ -25,6 +25,7 @@ import zlib
 
 import vapoursynth as vs
 from vapoursynth import core
+core.std.LoadPlugin(path="/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so")
 
 
 def get_plugins_path() -> str:
@@ -46,7 +47,7 @@ def get_plugins_path() -> str:
     return os.path.dirname(path).decode()
 
 plugins_path: str = get_plugins_path()
-trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
+trtexec_path: str =  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
 models_path: str = os.path.join(plugins_path, "models")
 
 
