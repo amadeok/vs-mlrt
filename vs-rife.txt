@@ -1,0 +1,89 @@
+
+R61
+
+!git clone -b R61 https://github.com/HolyWu/vs-rife
+
+
+
+R61
+
+!git clone -b R61 https://github.com/vapoursynth/vapoursynth
+pip3 install cython<3
+
+sudo dpkg -i cudnn-local-repo-$distro-8.x.x.x_1.0-1_amd64.deb
+
+sudo dpkg -i cudnn-local-repo-ubuntu2004-8.6.0.163_1.0-1_amd64.deb
+
+sudo cp /var/cudnn-local-repo-ubuntu2004-8.6.0.163/cudnn-local-*-keyring.gpg /usr/share/keyrings/
+ls/var/cudnn-local-repo-ubuntu2004-8.6.0.163/
+
+sudo apt-get install libcudnn8=8.6.0.163-1+cuda11.8
+
+sudo apt-get install libcudnn8-dev=8.6.0.163-1+cuda11.8
+
+sudo apt-get install libcudnn8-samples=8.6.0.163-1+cuda11.8
+
+
+os="ubuntu2004"
+tag="8.5.3-cuda-11.8"
+sudo dpkg -i nv-tensorrt-local-repo-${os}-${tag}_1.0-1_amd64.deb
+sudo cp /var/nv-tensorrt-local-repo-${os}-${tag}/*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+
+
+sudo apt-get install tensorrt
+sudo apt-get install tensorrt=8.5.3.1-1+cuda11.8
+
+
+sudo apt update -y
+sudo apt upgrade -y
+sudo apt install -y build-essential
+sudo apt install -y gcc-10 g++-10 cpp-10
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10
+
+
+
+
+sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+sudo apt install -y g++-11
+g++-11 --version
+make sure both gcc-11 and g++-11 are there
+sudo apt install -y g++-11
+
+
+/home/amadeok/bin/cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11 -S/home/amadeok/vs-mlrt/vstrt -B/home/amadeok/vs-mlrt/vstrt/build -G Ninja
+ /home/amadeok/bin/cmake --build /home/amadeok/vs-mlrt/vstrt/build --config Debug --target all --
+ 
+ /home/amadeok/bin/cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11 -S/home/amadeok/vs-mlrt/vstrt/trtexec -B/home/amadeok/vs-mlrt/vstrt/trtexec/build -G Ninja
+ /home/amadeok/bin/cmake --build /home/amadeok/vs-mlrt/vstrt/trtexec/build --config Debug --target all --
+ 
+ 
+ 
+ /home/amadeok/bin/cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11 -S/home/amadeok/vs-mlrt/vsov -B/home/amadeok/vs-mlrt/vsov/build -G Ninja
+ /home/amadeok/bin/cmake --build /home/amadeok/vs-mlrt/vsov/build --config Debug --target all --
+ 
+ 
+  /home/amadeok/bin/cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11 -S/home/amadeok/vs-mlrt/vsort -B/home/amadeok/vs-mlrt/vsort/build -G Ninja
+ /home/amadeok/bin/cmake --build /home/amadeok/vs-mlrt/vsort/build --config Debug --target all --
+ 
+ 
+   /home/amadeok/bin/cmake --no-warn-unused-cli -DCMAKE_BUILD_TYPE:STRING=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE -DCMAKE_C_COMPILER:FILEPATH=/usr/bin/gcc-11 -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/g++-11 -S/home/amadeok/vs-mlrt/vsncnn -B/home/amadeok/vs-mlrt/vsncnn/build -G Ninja
+ /home/amadeok/bin/cmake --build /home/amadeok/vs-mlrt/vsncnn/build --config Debug --target all --
+ 
+ 
+ 
+cd /home/amadeok/vs-mlrt/models/rife/
+ /usr/src/tensorrt/bin/trtexec --onnx=rife_v4.6.onnx --minShapes=input:1x1x8x8 --optShapes=input:1x1x64x64 --maxShapes=input:1x1x1080x1920 --saveEngine=rife_v4.6.engine --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT
+
+ /usr/src/tensorrt/bin/trtexec --onnx=rife_v4.6.onnx --minShapes=input:1x1x8x8 --optShapes=input:1x1x64x64 --maxShapes=input:1x1x1080x1920 --saveEngine=rife_v4.6.engine 
+  /usr/src/tensorrt/bin/trtexec --fp16 --onnx=rife_v4.6.onnx  --minShapes=input:1x3x8x8 --optShapes=input:1x3x720x1280 --maxShapes=input:1x3x1080x1920 --saveEngine=model.engine --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT --skipInference
+
+ 
+ /usr/src/tensorrt/bin/trtexec --fp16 --onnx=rife_v4.6.onnx --minShapes=input:1x3x8x8 --optShapes=input:1x3x720x1280 --maxShapes=input:1x3x1080x1920 --saveEngine=model.engine --tacticSources=+CUDNN,-CUBLAS,-CUBLAS_LT --skipInference --infStreams=4 --builderOptimizationLevel=4
+
+ 
+ 
+trtexec --onnx=rife_v4.6.onnx --timingCacheFile=rife_v4.6.onnx.1920x1088_fp16_trt-8502_cudnn_I-fp16_O-fp16_NVIDIA-GeForce-RTX-4090_3dcbe72f.engine.cache --device=0 --saveEngine=72f.engine --shapes=input:1x11x1088x1920 --fp16 --tacticSources=-CUBLAS,-CUBLAS_LT --useCudaGraph --noDataTransfers --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw
+
+ 
+ 

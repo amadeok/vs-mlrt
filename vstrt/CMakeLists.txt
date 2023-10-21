@@ -2,9 +2,10 @@ cmake_minimum_required(VERSION 3.20)
 
 project(vs-trt VERSION 3.1 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(VAPOURSYNTH_INCLUDE_DIRECTORY "" CACHE PATH "Path to VapourSynth headers")
+set(VAPOURSYNTH_INCLUDE_DIRECTORY "/usr/local/include/vapoursynth/" CACHE PATH "/usr/local/include/vapoursynth/")
 set(TENSORRT_HOME "" CACHE PATH "Path to TensorRT")
 option(USE_NVINFER_PLUGIN "Initialize nvinfer_plugin" FALSE)
 option(USE_NVINFER_PLUGIN_STATIC "Use static nvinfer_plugin" FALSE)
@@ -18,6 +19,7 @@ add_library(vstrt SHARED
 )
 
 target_include_directories(vstrt PRIVATE
+    "/usr/local/include/vapoursynth"
     ${VAPOURSYNTH_INCLUDE_DIRECTORY}
     ${CUDAToolkit_INCLUDE_DIRS}
     ${TENSORRT_HOME}/include
