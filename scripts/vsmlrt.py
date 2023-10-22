@@ -1147,6 +1147,10 @@ def trtexec(
     builder_optimization_level: int = 3
 ) -> str:
 
+    if not hasattr(core, "trt"):
+        core.std.LoadPlugin(path="/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so")
+        #print("TRT Reloaded: ",  hasattr(core, "trt"))
+
     # tensort runtime version, e.g. 8401 => 8.4.1
     trt_version = int(core.trt.Version()["tensorrt_version"])
 
