@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Player</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <video id="video-player" width="640" height="360" controls>
+        <source src="" type="video/mp4" id="video-source">
+        Your browser does not support the video tag.
+    </video>
+    <button id="play-button">Play Video</button>
+
+    <script>
+        $(document).ready(function() {
+            // Video file URL
+            var videoUrl = 'videos/dain.mp4';
+            var video = $('#video-player')[0];
+            var source = $('#video-source');
+
+            // Set video source
+            source.attr('src', videoUrl);
+            video.load(); // Load the new source
+
+            // Play video when the play button is clicked
+            $('#play-button').on('click', function() {
+                video.play();
+            });
+        });
+    </script>
+</body>
+</html>

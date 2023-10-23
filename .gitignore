@@ -3,3 +3,6 @@ build/
 models.v13.2.7z
 scripts/__pycache__/vsmlrt.cpython-38.pyc
 stream/
+scripts/server/expr/node_modules/
+scripts/server/expr/videos/01.mp4
+scripts/server/expr/videos/dain.mp4

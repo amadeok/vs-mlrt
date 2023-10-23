@@ -1,0 +1,19 @@
+<video-js id=vid1 width=600 height=300 class="vjs-default-skin" controls>
+    <source
+       src="https://example.com/index.m3u8"
+       type="application/x-mpegURL">
+  </video-js>
+  <!-- "core" version of Video.js -->
+  <script src="video.core.min.js"></script>
+  <script src="videojs-http-streaming.min.js"></script>
+  <script>
+import videojs from 'video.js';
+
+  var player = videojs('vid1');
+  player.play();
+  </script>
+
+
+
+
+

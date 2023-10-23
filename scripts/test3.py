@@ -132,7 +132,7 @@ else:
 clip = RIFE(clip,model=RIFEModel.v4_6, backend=Backend.TRT(num_streams=3), multi=2)
 #print("output")
 
-clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.YUV444P16, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
+clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
 
 if osdInfo == True:
   if   interpModel == 0:  iModel = "RIFE "

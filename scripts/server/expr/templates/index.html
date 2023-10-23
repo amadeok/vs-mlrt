@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video.js HLS Example</title>
+    <link href="https://vjs.zencdn.net/7.14.3/video-js.css" rel="stylesheet">
+</head>
+<body>
+    <video id="my-video" class="video-js" controls width="640" height="360"></video>
+    <script src="https://vjs.zencdn.net/7.14.3/video.js"></script>
+    <script src="https://unpkg.com/videojs-http-streaming/dist/videojs-http-streaming.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var player = videojs('my-video', {
+                techOrder: ['html5', 'vhs'] // Specify that VHS should be used for HLS playback
+            });
+            
+            player.src({
+                src: 'http://192.168.1.160:5000/s/out_vtt.m3u8',
+                type: 'application/x-mpegURL' // Specify the MIME type for HLS
+            });
+        });
+    </script>
+</body>
+</html>
