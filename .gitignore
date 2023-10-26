@@ -6,3 +6,5 @@ stream/
 scripts/server/expr/node_modules/
 scripts/server/expr/videos/01.mp4
 scripts/server/expr/videos/dain.mp4
+scripts/server/hls2/public/logo192.png
+scripts/server/hls2/public/logo512.png
