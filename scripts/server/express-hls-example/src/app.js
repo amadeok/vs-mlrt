@@ -19,12 +19,12 @@ const { start } = require("repl");
 app.use(bodyParser.json());
 
 host = "192.168.1.160"
-const socketPath = '/tmp/mpvsocketr'; 
+const socketPath = '/tmp/mpvsocketr';
 __dirname
-const streamPath = __dirname+"/stream/";
+const streamPath = __dirname + "/stream/";
 let inputFile = "/home/amadeok/Downloads/Demon Slayer/01.mp4";
 let useNvenc = 1;
-const enc = useNvenc ?   "--ovc=h264_nvenc --ovcopts-add=preset=p1" :  "--ovc=libx264";
+const enc = useNvenc ? "--ovc=h264_nvenc --ovcopts-add=preset=p1" : "--ovc=libx264";
 const opts = !useNvenc ? "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16" : "";
 let args = [
   "--vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8", enc, opts,
@@ -181,7 +181,19 @@ app.get('/files', (req, res) => {
   });
 });
 
-
+function checkFile(filePath, callback) {
+  fs.access(filePath, fs.constants.F_OK, (err) => {
+    if (err) {
+      // File doesn't exist yet, wait for a while and check again
+      setTimeout(() => {
+        checkFile(filePath, callback);
+      }, 1000); // wait for 1 second before checking again (adjust the time as needed)
+    } else {
+      // File exists
+      callback();
+    }
+  });
+}
 app.get('/mpv-play-file', (req, res) => {
 
   const file = req.query.file || ''; // Get subfolder path from query parameter
@@ -189,9 +201,16 @@ app.get('/mpv-play-file', (req, res) => {
   console.log('Requested file:', file_path);
   if (fs.existsSync(file_path)) {
     startMpvEv(file_path);
-    setTimeout(() => {
+
+    // setTimeout(() => {
+    //   res.json({ message: 'File exists, opening...' });
+    // }, 3000);
+
+    checkFile(streamPath + "str000000.ts", () => {
+      console.log(`File ${streamPath + "str000000.ts"} exists.`);
       res.json({ message: 'File exists, opening...' });
-    }, 3000);
+    });
+
   } else {
     res.status(500).json({ error: "Error file doesn't exist" });
   }

@@ -169,7 +169,7 @@ if osdInfo == True:
   
 fps_fraction = fractions.Fraction(container_fps * interpMulti).limit_denominator()
 output_num, output_den = fps_fraction.numerator, fps_fraction.denominator
-clip = core.std.AssumeFPS(clip, fpsnum=output_num, fpsden=output_den)
+#clip = core.std.AssumeFPS(clip, fpsnum=output_num, fpsden=output_den) GIVES WRONG FPS ON COLAB
 
 # output to mpv
 
