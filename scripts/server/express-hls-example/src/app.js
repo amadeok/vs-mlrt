@@ -29,7 +29,7 @@ const opts = !useNvenc ? "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,
 let args = [
   "--vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8", enc, opts,
   "--oac=aac", "--of=ssegment",
-  "--ofopts=segment_time=1,segment_format=mpegts,segment_list_size=25,"
+  "--ofopts=segment_time=1,segment_format=mpegts,segment_list_size=0,"
   + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
   "--input-ipc-server=/tmp/mpvsocketr", "--o=" + streamPath + "/str%06d.ts"];
 

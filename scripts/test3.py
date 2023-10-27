@@ -3,6 +3,8 @@
 ## Realtime RIFE interpolation script for MPV based on rife-ncnn-vulkan ##
 import sys
 sys.path.append("/home/amadeok/vs-mlrt/scripts/")
+sys.path.append("/content/mlrt/vs-mlrt/scripts")
+
 interpMulti             = 2          # Framerate multiplier
 interpModel             = 21         # Recommended 9 = rife-v4(supports over 2x multi) 5 = rife-2.3(higher quality only supports 2x)
 gpuThread               = 2          # GPU Thread count for interpolation
@@ -66,7 +68,8 @@ def float_to_ratio(flt):
 ffps = (interpMulti, 1)
 if isinstance(interpMulti, float):
   ffps = float_to_ratio(interpMulti)
-
+try:core.std.LoadPlugin("/content/vs-miscfilters-obsolete/build/libmiscfilters.so")
+except Exception as e: print(e)
 clip = core.misc.SCDetect(clip=clip,threshold=sceneDetectionThreshold)
 
 if   interpMulti == 3:  maxIpps = maxIpps * 0.85

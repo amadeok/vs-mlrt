@@ -25,7 +25,13 @@ import zlib
 
 import vapoursynth as vs
 from vapoursynth import core
-core.std.LoadPlugin(path="/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so")
+trtpath = ""
+if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
+    trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
+elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
+    trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
+
+core.std.LoadPlugin(path=trtpath)
 
 
 def get_plugins_path() -> str:
@@ -49,7 +55,8 @@ def get_plugins_path() -> str:
 plugins_path: str = get_plugins_path()
 trtexec_path: str =  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
 models_path: str = os.path.join(plugins_path, "models")
-
+if os.path.isdir("/content/drive/MyDrive/rifef/models"):
+  models_path: str = os.path.join(plugins_path, "models")
 
 class Backend:
     @dataclass(frozen=False)
@@ -1148,7 +1155,7 @@ def trtexec(
 ) -> str:
 
     if not hasattr(core, "trt"):
-        core.std.LoadPlugin(path="/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so")
+        core.std.LoadPlugin(path=trtpath)
         #print("TRT Reloaded: ",  hasattr(core, "trt"))
 
     # tensort runtime version, e.g. 8401 => 8.4.1

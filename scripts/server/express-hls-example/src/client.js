@@ -151,12 +151,16 @@ function startHls() {
     const videoSrc = '/stream/out.m3u8';
 
     if (Hls.isSupported()) {
-        hls = new Hls();
+        hls = new Hls({
+            //startLevel: -1, // Start playback with the lowest available quality
+            enableWorker: true, // Enable the worker for improved performance );
+            backBufferLength: 0, // Set the back buffer length in seconds
+        });
 
         hls.loadSource(videoSrc);
         hls.attachMedia(videoElement);
-        hls.config.backBufferLength = 0; // Set the back buffer length in seconds
-        
+        ///hls.config.backBufferLength = 0; // Set the back buffer length in seconds
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             videoElement.play();
         });
@@ -220,17 +224,37 @@ const sliderValueDisplay = document.getElementById('slider-value');
 let debounceTimeout;
 let bSeeking = false;
 
-videoElement .onwaiting = function() {
-    console.log("Video is buffering");
-};
+// videoElement .onwaiting = function() {
+//     console.log("Video is buffering");
+// };
 
-videoElement.onplaying = function() {
+videoElement.onplaying = function () {
     console.log("Video is no longer buffering and is playing");
-    if (bSeeking){
+    if (bSeeking) {
         videoElement.currentTime = videoElement.duration;
         bSeeking = false;
     }
 };
+
+
+videoElement.addEventListener('seeking', function() {
+    // Calculate the target seek position with low latency
+    console.log("seeking list")
+  //  var targetSeekTime = videoElement.duration; // Seek forward by 5 seconds (you can adjust this value)
+    
+    // Perform the seek operation
+    // if (hls.media) {
+    //     // Round the seek time to the nearest segment boundary for better accuracy
+    //     var nearestSegmentIndex = hls.media.segments.findSegmentIndex(targetSeekTime);
+    //     if (nearestSegmentIndex !== null) {
+    //         var nearestSegment = hls.media.segments.getSegment(nearestSegmentIndex);
+    //         var seekTime = nearestSegment.start;
+
+    //         // Perform the seek operation
+    //         video.currentTime = seekTime;
+    //     }
+    // }
+});
 
 seekSlider.addEventListener('input', function () {
     // Clear the previous debounce timeout
@@ -259,8 +283,8 @@ seekSlider.addEventListener('input', function () {
             .catch(error => {
                 console.error('Error:', error);
             }).finally(() => {
-                videoElement.currentTime =videoElement.duration;
-                
+                videoElement.currentTime = videoElement.duration;
+
                 // if (hls)
                 //     hls.destroy()
                 // startHls();
