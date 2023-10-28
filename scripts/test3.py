@@ -70,7 +70,7 @@ if isinstance(interpMulti, float):
   ffps = float_to_ratio(interpMulti)
 try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
 except Exception as e: print(e)
-clip = core.misc.SCDetect(clip=clip,threshold=sceneDetectionThreshold)
+#clip = core.misc.SCDetect(clip=clip,threshold=sceneDetectionThreshold)
 
 if   interpMulti == 3:  maxIpps = maxIpps * 0.85
 elif interpMulti == 4:  maxIpps = maxIpps * 0.80
