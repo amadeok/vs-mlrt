@@ -171,7 +171,7 @@ function startMpvEv(file) {
     startMpv(file);
 }
 
-startMpvEv(inputFile);
+//startMpvEv(inputFile);
 
 // mpvProcess.stdout.on('data', (data) => {  console.log(`stdout: ${data}`);  });
 // mpvProcess.stderr.on('data', (data) => {   console.error(`stderr: ${data}`); });
@@ -186,7 +186,7 @@ let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.ho
     if (inColab) {
         const ngrok = require('ngrok');
         (async function () {
-            const url = await ngrok.connect(port);
+            const url = await ngrok.connect(config.main.port);
             console.log(`Server is accessible from the internet at: ${url}`);
         })();
     }
