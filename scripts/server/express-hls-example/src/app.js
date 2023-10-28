@@ -2,7 +2,7 @@ var express = require("express");
 const fs = require('fs');
 const hls = require('hls-server');
 let mpv = require('mpv-ipc');
-const { exec } = require('child_process');
+const { exec, spawnSync, ChildProcess } = require('child_process');
 var ffmpeg = require('fluent-ffmpeg');
 // var livereload = require("livereload");
 // var connectLiveReload = require("connect-livereload");
@@ -33,23 +33,56 @@ config.main.useNvenc = parseInt(config.main.useNvenc);
 config.main.maxWidth = parseInt(config.main.maxWidth);
 config.debug.useChildSpawn = parseInt(config.debug.useChildSpawn)
 
-const socketPath = '/tmp/mpvsocketr';
+const socketPath = '/tmp/mpvsocketr2';
 const streamPath = __dirname + "/stream/";
 let inputFile = "/home/amadeok/Downloads/Demon Slayer/01.mp4";
-inputFile  = "/home/amadeok/Downloads/Star.Wars.Episode.III.Revenge.of.the.Sith.2005.REMASTERED.1080p.BluRay.x265-RBG.mp4"
+inputFile = "/home/amadeok/Downloads/bnha92.mkv"
 const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 
 let args = [
     "--oac=aac", "--of=ssegment", "--ofopts=segment_time=2,segment_format=mpegts,segment_list_size=0,"
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
-    "--input-ipc-server=/tmp/mpvsocketr", "--o=" + streamPath + "/str%06d.ts"];
+    "--input-ipc-server=/tmp/mpvsocketr2", "--o=" + streamPath + "/str%06d.ts"];
 
 let player = null;
 let latestSSegment = null;
 let latestCSegment = null;
 let latestSSegmentInt = null;
 const { spawn } = require('child_process');
+const { execSync } = require('child_process');
+
+function setMPVnice() {
+    const findProcessCommand = 'ps aux | grep mpv'; // Command to find MPV process
+    const reniceCommand = 'sudo renice -n 20 -p [PID]'; // Command to set niceness to 20, replace [PID] with the actual process ID
+
+    // Find the MPV process
+    exec(findProcessCommand, (err, stdout, stderr) => {
+        if (err) {
+            console.error('Error finding MPV process:', err);
+            return;
+        }
+
+        const lines = stdout.split('\n');
+        lines.forEach((line) => {
+            // Parse the process information to get the PID
+            const columns = line.split(/\s+/);
+            const pid = columns[1];
+
+            // Set niceness of the MPV process
+            if (pid && !isNaN(parseInt(pid))) {
+                const reniceCmd = reniceCommand.replace('[PID]', pid);
+                exec(reniceCmd, (reniceErr, reniceStdout, reniceStderr) => {
+                    if (reniceErr) {
+                        console.error(`Error setting niceness for PID ${pid}:`, reniceErr);
+                    } else {
+                        console.log(`Niceness set to 20 for PID ${pid}`);
+                    }
+                });
+            }
+        });
+    });
+}
 
 function startMpv(file) {
     ffmpeg.setFfprobePath("ffprobe");
@@ -76,25 +109,50 @@ function startMpv(file) {
                 resizeVF = "lavfi=[scale=" + config.main.maxWidth + ":-1],"
                 console.log("Automatic downscaling: ", videow, "px to ", config.main.maxWidth, "px ")
             }
-            const vfarg = "--vf='" + resizeVF + "vapoursynth:[" +  (inColab ? "/content/mlrt/" : "/home/amadeok/") 
-            + "vs-mlrt/scripts/test3.py]':4:8";
+            let vfarg = "--vf='" + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
+                + "vs-mlrt/scripts/test3.py]':4:8";
+            vfarg = "";
             extr = '"';
-            let binary = inColab  || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : "";
+            let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " + " sudo nice -n -20 " : "sudo nice -n -20 ";
+            binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' "   : " ";
+
             binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
             enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
-         
-            let strArgs = binary + " '" + file + "' " + enc_args.join(" ") +  " " +vfarg + " " +  args.join(" ");
+
+            let strArgs = binary + " '" + file + "' " + enc_args.join(" ") + " " + vfarg + " " + args.join(" ");
             console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
             if (config.debug.useChildSpawn) {
-                file =  ' "' + file + '" ';
+                file = ' "' + file + '" ';
                 let listArgs = [file, ...enc_args, vfarg, ...args];
-                console.log("\n---> MPV COMAND (arr): \n ", binary,  listArgs, "\n");
+                console.log("\n---> MPV COMAND (arr): \n ", binary, listArgs, "\n");
 
                 const childProcess = spawn(binary, listArgs, {
                     stdio: 'inherit',
-                     shell: true
+                    shell: true
                 });
+                // console.log("\n\nNICENESS");
+
+                // try {
+                //     const stdout = execSync('ps aux | grep mpv').toString();
+                //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
+
+                //     processes.forEach(processInfo => {
+                //         const columns = processInfo.trim().split(/\s+/);
+                //         const pid = columns[1];
+                //         spawnSync('renice', ['-n', "-19", '-p', pid] , { stdio: 'inherit', shell: true});
+                //         const niceness = columns[17]; // Niceness value is usually found at index 17
+                //         const ret = spawnSync("ps", ["-o", "pid,ni,cmd", "-p", pid], {
+                //             stdio: 'inherit',
+                //             shell: true
+                //         });
+                //         //console.log(`PID: ${pid}, Niceness: ${niceness}`);
+                //     });
+                // } catch (error) {
+                //     console.error(`Error: ${error.message}`);
+                // }
+                //console.log("NICENESS\n\n");
+
                 // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
                 //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
                 //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
