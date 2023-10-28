@@ -132,7 +132,7 @@ else:
 	else:
 		clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s=cMatrix, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(dsWidth), height=mult32(dsHeight))
 
-clip = RIFE(clip,model=RIFEModel.v4_6, backend=Backend.TRT(num_streams=3), multi=2)
+clip = RIFE(clip,model=RIFEModel.v4_6, backend=Backend.TRT(num_streams=2), multi=2)
 #print("output")
 
 clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
