@@ -94,48 +94,54 @@ try:
 except:
     cFamily = 'ColorFamily.YUV'
 
-if autoScale == True and autoScaleInteger == False and clipIpps > maxIpps:
-  dsPercent = 1.00
-  while clipIpps > maxIpps:
-    dsPercent -= ScaleSteps
-    dsWidth  = int(video_in_dw * dsPercent)
-    dsHeight = int(video_in_dh * dsPercent)
-    clipIpps = clipFps * dsWidth * dsHeight * (interpMulti - 1)
+# if autoScale == True and autoScaleInteger == False and clipIpps > maxIpps:
+#   dsPercent = 1.00
+#   while clipIpps > maxIpps:
+#     dsPercent -= ScaleSteps
+#     dsWidth  = int(video_in_dw * dsPercent)
+#     dsHeight = int(video_in_dh * dsPercent)
+#     clipIpps = clipFps * dsWidth * dsHeight * (interpMulti - 1)
       
-elif autoScale == True and autoScaleInteger == True and clipIpps > maxIpps:
-  multi = interpMulti - 1
-  vidW  = video_in_dw
-  vidH  = video_in_dh
-  while clipIpps > maxIpps:
-    clipIpps = clipFps * vidW * vidH * multi
-    vidW = vidW / 2
-    vidH = vidH / 2
-    dsWidth  = int(vidW)
-    dsHeight = int(vidH)
-else:
-  autoScale = False
+# elif autoScale == True and autoScaleInteger == True and clipIpps > maxIpps:
+#   multi = interpMulti - 1
+#   vidW  = video_in_dw
+#   vidH  = video_in_dh
+#   while clipIpps > maxIpps:
+#     clipIpps = clipFps * vidW * vidH * multi
+#     vidW = vidW / 2
+#     vidH = vidH / 2
+#     dsWidth  = int(vidW)
+#     dsHeight = int(vidH)
+# else:
+#   autoScale = False
   
 
-  def mult32(number):
-    closest_multiple = ((number + 31) // 32) * 32
-    return closest_multiple
+def mult32(number):
+  closest_multiple = ((number + 31) // 32) * 32
+  return closest_multiple
+autoscale = False
+
+tw = 1280
+th =720
+def getW(): return  mult32(tw) if autoScale  else mult32(dsWidth)
+def getH(): return mult32(th) if autoScale else mult32(dsHeight)
 
 
 if autoScale == True:
 	if cFamily == 'ColorFamily.RGB':
-		clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.RGBS, range_in_s=cRange, filter_param_a=1, filter_param_b=0)
+		clip = core.resize.Bicubic(clip, width=getW(), height=getH(), format=vs.RGBS, range_in_s=cRange, filter_param_a=1, filter_param_b=0)
 	else:
-		clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.RGBS, matrix_in_s=cMatrix, range_in_s=cRange, filter_param_a=1, filter_param_b=0)
+		clip = core.resize.Bicubic(clip, width=getW(), height=getH(), format=vs.RGBS, matrix_in_s=cMatrix, range_in_s=cRange, filter_param_a=1, filter_param_b=0)
 else:
 	if cFamily == 'ColorFamily.RGB':
-		clip = core.resize.Bicubic(clip, format=vs.RGBS, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(dsWidth), height=mult32(dsHeight))
+		clip = core.resize.Bicubic(clip, format=vs.RGBS, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(getW()), height=mult32(getH()))
 	else:
-		clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s=cMatrix, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(dsWidth), height=mult32(dsHeight))
+		clip = core.resize.Bicubic(clip, format=vs.RGBS, matrix_in_s=cMatrix, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(getW()), height=mult32(getH()))
 
 clip = RIFE(clip,model=RIFEModel.v4_6, backend=Backend.TRT(num_streams=2, use_cuda_graph=True), multi=2)
 #print("output")
 
-clip = core.resize.Bicubic(clip, width=dsWidth, height=dsHeight, format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
+clip = core.resize.Bicubic(clip, width=getW(), height=getH(), format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
 
 if osdInfo == True:
   if   interpModel == 0:  iModel = "RIFE "
@@ -164,7 +170,7 @@ if osdInfo == True:
   elif interpModel == 23: iModel = "sudo_rife4 "
   elif interpModel == 24: iModel = "sudo_rife4-ES-SLOW "
   elif interpModel == 25: iModel = "sudo_rife4-ES "
-  clip = core.text.Text(clip, text=(iModel + str(interpMulti) + "x " + str(dsWidth) + "x" + str(dsHeight) + "@" + f"{(clipFps*interpMulti):.3f}" + "hz") ,alignment=7, scale=1) 
+  clip = core.text.Text(clip, text=(iModel + str(interpMulti) + "x " + str(getW()) + "x" + str(getH()) + "@" + f"{(clipFps*interpMulti):.3f}" + "hz") ,alignment=7, scale=1) 
   
   
 fps_fraction = fractions.Fraction(container_fps * interpMulti).limit_denominator()

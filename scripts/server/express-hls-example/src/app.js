@@ -105,13 +105,13 @@ function startMpv(file) {
                     stream = str;
 
             videow = stream.width;
-            if (videow > config.main.maxWidth) {
-                resizeVF = "lavfi=[scale=" + config.main.maxWidth + ":-1],"
+            if (videow > config.main.maxWidth && 1) {
+                resizeVF = "lavfi=[scale=" + config.main.maxWidth + ":-1]," 
                 console.log("Automatic downscaling: ", videow, "px to ", config.main.maxWidth, "px ")
             }
             let vfarg = "--vf='" + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
                 + "vs-mlrt/scripts/test3.py]':4:8";
-            vfarg = "";
+            //vfarg = "";
             extr = '"';
             let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " + " sudo nice -n -20 " : "sudo nice -n -20 ";
             binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' "   : " ";
