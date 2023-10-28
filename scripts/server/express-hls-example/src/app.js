@@ -25,7 +25,7 @@ googleDrivePath = '/content/drive/MyDrive';
 if (fs.existsSync(googleDrivePath))
     inColab = true
 
-const configFile = __dirname + "/" + (inColab ? 'configColab.ini' : "config.ini");
+const configFile = inColab ? googleDrivePath + '/rifef/configColab.ini' : __dirname + "/config.ini";
 const fileContent = fs.readFileSync(configFile, 'utf8');
 config = ini.parse(fileContent);
 config.main.segmentBufferN = parseInt(config.main.segmentBufferN);
@@ -103,18 +103,39 @@ function startMpv(file) {
             for (var str of metadata.streams)
                 if (str.codec_type == "video")
                     stream = str;
+            aspectr = config.main.aspectRatio;
+
+            const parts = aspectr.split(':');
+            const awidth = parseInt(parts[0]);
+            const aheight = parseInt(parts[1]);
+            let f = awidth / aheight, f2 = stream.width / stream.height;
+            let dif = Math.abs(f - f2);
+            cropVF = "";
+            let newW = stream.width, newH = stream.height;
+            let cropRes = "";
+            if (dif > 0.1) {
+                newH = stream.width / f;
+                cropRes = `${newW}:${parseInt(newH)}`
+                cropVF = `crop=${cropRes},`
+                console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
+            }
+            function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
 
             videow = stream.width;
             if (videow > config.main.maxWidth && 1) {
-                resizeVF = "lavfi=[scale=" + config.main.maxWidth + ":-1]," 
-                console.log("Automatic downscaling: ", videow, "px to ", config.main.maxWidth, "px ")
+                var varr = (config.main.maxWidth / videow) * newH;
+                newW = rNearestMultfTwo(config.main.maxWidth), newH = rNearestMultfTwo(varr);
+                resizeVF = `lavfi=[scale=${newW}:${newH}],`
+                console.log(`Automatic downscaling:     ${cropRes} -> ${newW}:${newH}`)
             }
-            let vfarg = "--vf='" + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
+
+
+            let vfarg = "--vf='" + cropVF + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
                 + "vs-mlrt/scripts/test3.py]':4:8";
-            //vfarg = "";
-            extr = '"';
+            // vfarg = "";
+
             let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " + " sudo nice -n -20 " : "sudo nice -n -20 ";
-            binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' "   : " ";
+            binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : " ";
 
             binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
             enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
@@ -323,14 +344,20 @@ app.get('/mpv-play-file', (req, res) => {
     console.log('Requested file:', file_path);
     if (fs.existsSync(file_path)) {
         startMpvEv(file_path);
-        // setTimeout(() => {
-        //   res.json({ message: 'File exists, opening...' });
-        // }, 3000);
+        setTimeout(() => {
 
-        checkFile(streamPath + "str000000.ts", () => {
-            console.log(`File ${streamPath + "str000000.ts"} exists.`);
-            res.json({ message: 'File exists, opening...' });
-        });
+            checkFile(streamPath + "str000002.ts", () => {
+                console.log(`File ${streamPath + "str000002.ts"} exists.`);
+
+                player.getProperty('track-list').then(tr => {
+                    console.log("Got file track-list");
+                    res.json({ trackList: tr });
+                }).catch((error) => { console.log(error); })
+
+                //res.json({ message: 'File exists, opening...' });
+            });        //
+        }, 1000);
+
     } else {
         res.status(500).json({ error: "Error file doesn't exist" });
     }
@@ -347,6 +374,22 @@ app.post('/mpv-pause-cycle', async (req, res) => {
         console.log("Cycle pause");
         player.command("cycle", "pause");
         res.json({ message: 'Cycle command received successfully.' });
+
+    } catch (error) {
+        console.error('Error  occurred:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.post('/mpv-sub-cycle', async (req, res) => {
+    try {
+        console.log("Cycle subtitle");
+
+        player.command("cycle", "sub").then(sub => {
+            player.getProperty('current-tracks/sub').then(sub => {
+                res.json({ curSub: sub });
+            }).catch((error) => { console.log(error); })
+        }).catch((error) => { console.log(error); })
 
     } catch (error) {
         console.error('Error  occurred:', error);

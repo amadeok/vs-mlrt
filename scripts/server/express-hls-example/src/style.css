@@ -92,6 +92,17 @@ body {
     background-color: #22022e9f; /* Replace #ff0000 with the color of your choice */
 }
 
+#subfield {
+    margin: 15px;
+    font-size: 20px;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.556);
+    border-radius: 5px;
+    width: 50%;
+    padding: 5px 20px 5px;
+    box-shadow: 1px 1px 10px #000000;
+
+}
 
 /* audio::-webkit-media-controls-timeline,
 video::-webkit-media-controls-timeline {

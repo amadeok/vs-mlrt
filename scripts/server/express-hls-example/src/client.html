@@ -9,27 +9,32 @@
 </head>
 
 <body>
-    <div class="main"> 
-    <video id="video" class="video-class" controls muted></video>
+    <div class="main">
+        <video id="video" class="video-class" controls muted></video>
 
-    <ul class="file-list" id="file-list">
-        <!-- File items will be added here dynamically using JavaScript -->
-    </ul>
+        <ul class="file-list" id="file-list">
+            <!-- File items will be added here dynamically using JavaScript -->
+        </ul>
 
-    
-    <!-- <button onclick="myFunction()">Click Me!</button> -->
-    <div id="buttons">
-    <button id="triggerButton">Play / Pause </button>
-    <button id="toggle-button">Show Video</button>
-    </div>
-    <div id="result"></div>
-    <input type="range" min="0" max="1000" value="50" class="slider" id="seek-slider">
-    <div id="slider-value"></div>
-    <div id="response"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"> </script>
+        <!-- <button onclick="myFunction()">Click Me!</button> -->
+        <div id="buttons">
+            <!-- <button id="triggerButton">Play / Pause </button> -->
+            <button id="toggle-button">Show Video</button>
+            <button id="subtitle-cycle-button">Next subtitle</button>
+        </div>
+        <div id="result"></div>
+        <input type="range" min="0" max="1000" value="50" class="slider" id="seek-slider">
+        <!-- <div id="slider-value"></div> -->
+        <div id="subfield"> <span> Subtitle:</span>
+            <span id="subtitle-name">None</span>
+        </div>
 
-    <script src="clientjs"></script>
+        <div id="response"></div>
+
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"> </script>
+
+        <script src="clientjs"></script>
     </div>
 </body>
 

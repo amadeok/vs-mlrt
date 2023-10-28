@@ -96,7 +96,7 @@ function createListElement(name, type, absPath, fileListElem) {
                     video.pause();
                     startPlayEv();
 
-                    console.log('Play file server response:', data.message);
+                    console.log('Play file server response:', data.trackList);
                 }).catch(error => { console.error('Error:', error); });
         }
         // Prevent the default behavior of the link (e.g., navigating to a different page)
@@ -194,11 +194,11 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('Player status:', isTherePlayer);
         }).catch(error => { console.error('Error:', error); });
 
-    if (videoElement.paused) {
-        playPauseBtn.textContent = "Pause";
-    } else {
-        playPauseBtn.textContent = "Play ";
-    }
+    // if (videoElement.paused) {
+    //     playPauseBtn.textContent = "Pause";
+    // } else {
+    //     playPauseBtn.textContent = "Play ";
+    // }
 
     updateFilebrowser('')
 
@@ -216,8 +216,21 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
-
-
+const subtitleNameField = document.getElementById('subtitle-name');
+const subCycleBtn =  document.getElementById("subtitle-cycle-button");
+subCycleBtn.addEventListener('click', async () => {
+        try {
+            const response = await fetch('/mpv-sub-cycle', {
+                method: 'POST',
+            });
+            const data = await response.json();
+            subtitleNameField.innerText = data.curSub.title;
+            //console.log(data.curSub);
+        } catch (error) {
+            console.error('Error:', error);
+            subtitleNameField.innerText = 'Error occurred. Please try again.';
+        }
+    });
 
 const seekSlider = document.getElementById('seek-slider');
 const sliderValueDisplay = document.getElementById('slider-value');
@@ -265,7 +278,7 @@ seekSlider.addEventListener('input', function () {
     // Set a new debounce timeout
     debounceTimeout = setTimeout(() => {
         const sliderValue = seekSlider.value;
-        sliderValueDisplay.textContent = `Slider Value: ${sliderValue}`;
+        //sliderValueDisplay.textContent = `Slider Value: ${sliderValue}`;
 
         // Make a POST request to the server
         fetch('/mpv-seek', {
@@ -308,27 +321,27 @@ seekSlider.addEventListener('input', function () {
 function togglePlayPause() {
     if (videoElement.paused) {
         videoElement.play();
-        playPauseBtn.textContent = "Pause";
+        //playPauseBtn.textContent = "Pause";
     } else {
         videoElement.pause();
-        playPauseBtn.textContent = "Play ";
+        //playPauseBtn.textContent = "Play ";
     }
 }
 
-playPauseBtn.addEventListener('click', async () => {
-    // try {
-    //     const response = await fetch('/mpv-pause-cycle', {
-    //         method: 'POST',
-    //     });
-    //     const data = await response.json();
-    //     document.getElementById('result').innerText = data.message;
-    // } catch (error) {
-    //     // Handle errors, if any
-    //     console.error('Error:', error);
-    //     document.getElementById('result').innerText = 'Error occurred. Please try again.';
-    // }
-    togglePlayPause();
-});
+// playPauseBtn.addEventListener('click', async () => {
+//     // try {
+//     //     const response = await fetch('/mpv-pause-cycle', {
+//     //         method: 'POST',
+//     //     });
+//     //     const data = await response.json();
+//     //     document.getElementById('result').innerText = data.message;
+//     // } catch (error) {
+//     //     // Handle errors, if any
+//     //     console.error('Error:', error);
+//     //     document.getElementById('result').innerText = 'Error occurred. Please try again.';
+//     // }
+//     togglePlayPause();
+// });
 
 
 
