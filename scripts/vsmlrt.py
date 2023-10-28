@@ -1300,6 +1300,7 @@ def trtexec(
         if prev_env_value is not None and len(prev_env_value) > 0:
             # env_key has been set, no extra action
             env = {env_key: prev_env_value}
+            print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
             subprocess.run(args, env=env, check=True, stdout=sys.stderr)
         else:
             time_str = time.strftime('%y%m%d_%H%M%S', time.localtime())
@@ -1310,7 +1311,7 @@ def trtexec(
             )
 
             env = {env_key: log_filename}
-
+            print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
             completed_process = subprocess.run(args, env=env, check=False, stdout=sys.stderr)
 
             if completed_process.returncode == 0:
@@ -1325,6 +1326,7 @@ def trtexec(
                 else:
                     raise RuntimeError(f"trtexec execution fails but no log is found")
     else:
+        print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
         subprocess.run(args, check=True, stdout=sys.stderr)
 
     return engine_path

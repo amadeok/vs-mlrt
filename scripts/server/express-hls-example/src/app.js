@@ -3,7 +3,7 @@ const fs = require('fs');
 const hls = require('hls-server');
 let mpv = require('mpv-ipc');
 const { exec } = require('child_process');
-
+var ffmpeg = require('fluent-ffmpeg');
 // var livereload = require("livereload");
 // var connectLiveReload = require("connect-livereload");
 //let path = require('path')
@@ -12,6 +12,7 @@ const bodyParser = require('body-parser'); // Middleware to parse the request bo
 const path = require('path');
 const { start } = require("repl");
 const { assert } = require("console");
+const ini = require('ini');
 
 // const liveReloadServer = livereload.createServer();
 // liveReloadServer.watch(path.join(__dirname, 'public'));
@@ -24,21 +25,23 @@ googleDrivePath = '/content/drive/MyDrive';
 if (fs.existsSync(googleDrivePath))
     inColab = true
 
-const configFile = __dirname + inColab ? 'configColab.ini' : "config.ini";
+const configFile = __dirname + "/" + (inColab ? 'configColab.ini' : "config.ini");
 const fileContent = fs.readFileSync(configFile, 'utf8');
 config = ini.parse(fileContent);
+config.main.segmentBufferN = parseInt(config.main.segmentBufferN);
+config.main.useNvenc = parseInt(config.main.useNvenc);
+config.main.maxWidth = parseInt(config.main.maxWidth);
+config.debug.useChildSpawn = parseInt(config.debug.useChildSpawn)
 
 const socketPath = '/tmp/mpvsocketr';
-__dirname
 const streamPath = __dirname + "/stream/";
 let inputFile = "/home/amadeok/Downloads/Demon Slayer/01.mp4";
-let useNvenc = 1;
-const enc = useNvenc ? "--ovc=h264_nvenc --ovcopts-add=preset=p1" : "--ovc=libx264";
-const opts = !useNvenc ? "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16" : "";
+inputFile  = "/home/amadeok/Downloads/Star.Wars.Episode.III.Revenge.of.the.Sith.2005.REMASTERED.1080p.BluRay.x265-RBG.mp4"
+const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
+const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
+
 let args = [
-    //"--vf='lavfi=[scale=iw/2:ih/2],"+
-    enc, opts, "--oac=aac", "--of=ssegment",
-    "--ofopts=segment_time=2,segment_format=mpegts,segment_list_size=0,"
+    "--oac=aac", "--of=ssegment", "--ofopts=segment_time=2,segment_format=mpegts,segment_list_size=0,"
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
     "--input-ipc-server=/tmp/mpvsocketr", "--o=" + streamPath + "/str%06d.ts"];
 
@@ -46,6 +49,7 @@ let player = null;
 let latestSSegment = null;
 let latestCSegment = null;
 let latestSSegmentInt = null;
+const { spawn } = require('child_process');
 
 function startMpv(file) {
     ffmpeg.setFfprobePath("ffprobe");
@@ -56,28 +60,54 @@ function startMpv(file) {
         } else {
             if (file == undefined) file = inputFile;
             if (player != null) player.command("quit");
-            if (latestSSegmentInt) clearInterval(latestSSegmentInt);
+            if (latestSSegmentInt)
+                clearInterval(latestSSegmentInt);
             player = null;
-
-            console.log(metadata);
-            videow = metadata.width;
-            if (videow > config.maxWidth) {
-                resizeVF = "lavfi=[scale=" + config.maxWidth + ":-1],"
-                console.log("Automatic downscaling: ", videow, " to ", config.maxWidth)
-            }
-            const vfarg = "--vf='" + resizeVF + "vapoursynth:[/content/mlrt/vs-mlrt/scripts/test3.py]':4:8";
-
-            let command = inColab ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib'" : "";
-            command += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv "' : ' mpv "';
-            command += + file + '" ' + resizeVF + args.join(" ");
-            console.log("---> COMAND ", command);
             exec("rm " + streamPath + "*", (error, stdout, stderr) => { });
 
-            exec(command, (error, stdout, stderr) => {
-                if (error) { console.error(`Error occurred: ${error.message}`); return; }
-                if (stderr) { console.error(`stderr: ${stderr}`); return; }
-                console.log(`stdout: ${stdout}`);
-            });
+            //console.log(metadata);
+            let stream = null;
+            for (var str of metadata.streams)
+                if (str.codec_type == "video")
+                    stream = str;
+
+            videow = stream.width;
+            if (videow > config.main.maxWidth) {
+                resizeVF = "lavfi=[scale=" + config.main.maxWidth + ":-1],"
+                console.log("Automatic downscaling: ", videow, "px to ", config.main.maxWidth, "px ")
+            }
+            const vfarg = "--vf='" + resizeVF + "vapoursynth:[" +  (inColab ? "/content/mlrt/" : "/home/amadeok/") 
+            + "vs-mlrt/scripts/test3.py]':4:8";
+            extr = '"';
+            let binary = inColab  || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : "";
+            binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
+            enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
+         
+            let strArgs = binary + " '" + file + "' " + enc_args.join(" ") +  " " +vfarg + " " +  args.join(" ");
+            console.log("\n---> MPV COMAND: \n", strArgs, "\n");
+
+            if (config.debug.useChildSpawn) {
+                file =  ' "' + file + '" ';
+                let listArgs = [file, ...enc_args, vfarg, ...args];
+                console.log("\n---> MPV COMAND (arr): \n ", binary,  listArgs, "\n");
+
+                const childProcess = spawn(binary, listArgs, {
+                    stdio: 'inherit',
+                     shell: true
+                });
+                // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
+                //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
+                //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
+            }
+            else {
+                exec(strArgs, (error, stdout, stderr) => {
+                    if (error) { console.error(`Error occurred: ${error.message}`); return; }
+                    if (stderr) { console.error(`stderr: ${stderr}`); return; }
+                    console.log(`stdout: ${stdout}`);
+                });
+            }
+
+            latestSSegmentInt = setInterval(getLatestHLSSegmentF, 3000);
 
             setTimeout(() => {
                 const pl = new mpv.MPVClient(socketPath);
@@ -110,17 +140,18 @@ function getLatestHLSSegment(folderPath) {
 }
 function getLatestHLSSegmentF() {
     let latestsegment = getLatestHLSSegment(streamPath);
+    //  console.log("getlatest")
     const regex = /(\d+)/;
     if (latestsegment) {
         const number = latestsegment.match(regex)[0];
         latestSSegment = parseInt(number, 10);
         let d = latestSSegment - latestCSegment;
         console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
-        if (d > 10) {
+        if (d > config.main.segmentBufferN) {
             player.getProperty("pause")
                 .then((res) => {
                     if (!res) {
-                        console.log("---> pausing delta")
+                        console.log("---> pausing delta <--- \n")
                         player.pause();
                     }
                 }).catch((e) => { console.log(e) });
@@ -129,7 +160,7 @@ function getLatestHLSSegmentF() {
             player.getProperty("pause")
                 .then((res) => {
                     if (res) {
-                        console.log("---> resuming delta")
+                        console.log("---> resuming delta <--- \n")
                         player.resume();
                     }
                 }).catch((e) => { console.log(e) });
@@ -138,10 +169,9 @@ function getLatestHLSSegmentF() {
 }
 function startMpvEv(file) {
     startMpv(file);
-    latestSSegmentInt = setInterval(getLatestHLSSegmentF, 3000);
 }
 
-//startMpvEv();
+startMpvEv(inputFile);
 
 // mpvProcess.stdout.on('data', (data) => {  console.log(`stdout: ${data}`);  });
 // mpvProcess.stderr.on('data', (data) => {   console.error(`stderr: ${data}`); });
@@ -150,8 +180,8 @@ function startMpvEv(file) {
 
 //const player = new mpv.MPVClient(socketPath);
 
-let server = app.listen(config.port, inColab ? "127.0.0.1" : config.host, () => {
-    console.log(`Server is listening at http://${host}:${port}`);
+let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
+    console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
 
     if (inColab) {
         const ngrok = require('ngrok');
@@ -178,7 +208,7 @@ app.get('/clientjs', (req, res) => {
 app.get('/files', (req, res) => {
 
     const subfolder = req.query.subfolder || ''; // Get subfolder path from query parameter
-    const directoryPath2 = path.join(config.mediadir, subfolder);
+    const directoryPath2 = path.join(config.main.mediadir, subfolder);
 
     fs.readdir(directoryPath2, (err, files) => {
         if (err) {
@@ -231,7 +261,7 @@ function checkFile(filePath, callback) {
 app.get('/mpv-play-file', (req, res) => {
 
     const file = req.query.file || ''; // Get subfolder path from query parameter
-    const file_path = path.join(config.mediadir, file);
+    const file_path = path.join(config.main.mediadir, file);
     console.log('Requested file:', file_path);
     if (fs.existsSync(file_path)) {
         startMpvEv(file_path);
