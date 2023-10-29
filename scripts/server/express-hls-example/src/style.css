@@ -2,9 +2,11 @@
     width: 75%;
     margin-top: 5px;
 }
+
 #slider-value {
     margin-top: 20px;
 }
+
 html {
     /* border:1px solid red; */
 
@@ -23,10 +25,12 @@ html {
 
 }
 
-#file-list-cont{
-    width: 75%; /* Set the width of the container */
+#file-list-cont {
+    width: 75%;
+    /* Set the width of the container */
 }
-#file-list{
+
+#file-list {
     display: block;
     min-width: 75%;
     /* aspect-ratio: 16/9; */
@@ -37,40 +41,45 @@ html {
     padding-left: 20px;
     background-color: rgba(60, 45, 74, 0.821);
     box-shadow: 1px 1px 10px #000000;
-    border:1px solid;
+    border: 1px solid;
     border-radius: 10px;
     /* color: aqua; */
 
 }
-.file-list-item{
-    
+
+.file-list-item {
+
     padding: 7px;
     margin-left: 8px;
     text-shadow: 5px;
     color: aliceblue;
-    border-bottom :1px solid rgba(124, 105, 141, 0.547);
-    font-size: 20px;   
+    border-bottom: 1px solid rgba(124, 105, 141, 0.547);
+    font-size: 20px;
 }
 
 @media only screen and (max-device-width: 767px) and (orientation: portrait) {
     .file-list-item {
-        margin-left:  35px; /* Change margin for devices with a maximum width of 767 pixels */
+        margin-left: 35px;
+        /* Change margin for devices with a maximum width of 767 pixels */
         padding-bottom: 15px;
         padding-top: 15px;
     }
-    #file-list{
+
+    #file-list {
         min-width: 90%;
     }
 }
-.file-list-item a{
-    color:rgba(255, 255, 255, 0.943);
+
+.file-list-item a {
+    color: rgba(255, 255, 255, 0.943);
     text-decoration: none;
     text-overflow: ellipsis;
 
 }
+
 /* file-list > * */
 
-.main{
+.main {
     display: flex;
     flex: 1 1 1;
     align-items: center;
@@ -82,17 +91,19 @@ html {
     box-shadow: 1px 1px 10px #000000;
 
 }
-.main > *{
-    
+
+.main>* {
+
     margin-left: 10px;
     margin-right: 10px;
 }
 
 body {
-    background-color: #22022e9f; /* Replace #ff0000 with the color of your choice */
+    background-color: #22022e9f;
+    /* Replace #ff0000 with the color of your choice */
 }
 
-#subfield {
+.trackfield {
     margin: 15px;
     font-size: 20px;
     color: white;
@@ -101,8 +112,18 @@ body {
     width: 50%;
     padding: 5px 20px 5px;
     box-shadow: 1px 1px 10px #000000;
-
 }
+.trackfield> *{
+    padding:5px;
+}
+
+.trackfield> :first-child {
+    border-bottom: #a857eba8 solid 1px;
+}
+#audio-cycle-button{
+    display:none;
+}
+
 
 /* audio::-webkit-media-controls-timeline,
 video::-webkit-media-controls-timeline {
@@ -129,12 +150,17 @@ button {
     text-align: center;
     text-decoration: none;
     /* Default button colors */
-    background-color: rgba(42, 30, 54, 0.563);; /* Green background */
-    color: white; /* White text */
-    border:1px solid rgba(0, 0, 0, 0.412); /* No border */
-    border-radius: 5px; /* Rounded corners */
+    background-color: rgba(42, 30, 54, 0.563);
+    ;
+    /* Green background */
+    color: white;
+    /* White text */
+    border: 1px solid rgba(0, 0, 0, 0.412);
+    /* No border */
+    border-radius: 5px;
+    /* Rounded corners */
     /* Adds a box shadow for a 3D effect */
-    box-shadow: 0px 0px 5px 0px rgba(0,0,0,0.75);
+    box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.75);
 }
 
 
@@ -148,15 +174,16 @@ input[type=range] {
     width: 100%;
     height: 25px;
     /* Styles for the track */
-    background-color: rgb(84, 63, 104);/
-    border-radius: 5px;
+    background-color: rgb(84, 63, 104);/ border-radius: 5px;
     /* Styles for the thumb (slider handle) */
     cursor: pointer;
 }
 
 /* Change the color of the track as the slider is dragged */
 input[type=range]::-webkit-slider-runnable-track {
-    background: rgb(46, 34, 58);; /* Green track color */
+    background: rgb(46, 34, 58);
+    ;
+    /* Green track color */
     border: 1px solid black;
     border-radius: 5px;
     box-shadow: 1px 1px 3px black;
@@ -165,20 +192,26 @@ input[type=range]::-webkit-slider-runnable-track {
 
 /* Change the color of the thumb (slider handle) */
 input[type=range]::-webkit-slider-thumb {
-    background: #ffffff; /* White thumb color */
-    border: 1px solid #4caf50; /* Green border around the thumb */
-    border-radius: 50%; /* Rounded thumb */
+    background: #ffffff;
+    /* White thumb color */
+    border: 1px solid #4caf50;
+    /* Green border around the thumb */
+    border-radius: 50%;
+    /* Rounded thumb */
     /* Adds a box shadow to the thumb for a more prominent effect */
-    box-shadow: 0px 0px 5px 0px rgba(0,0,0,0.75);
+    box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.75);
 }
 
 /* Change the color of the thumb (slider handle) when active (clicked or dragged) */
 input[type=range]:active::-webkit-slider-thumb {
-    background: #ff9800; /* Orange thumb color */
-    border-color: #ff9800; /* Orange border color */
+    background: #ff9800;
+    /* Orange thumb color */
+    border-color: #ff9800;
+    /* Orange border color */
 }
 
 /* Change the color of the value (highlight) on the track */
 input[type=range]::-moz-range-progress {
-    background-color: #ff9800; /* Orange highlight color */
+    background-color: #ff9800;
+    /* Orange highlight color */
 }

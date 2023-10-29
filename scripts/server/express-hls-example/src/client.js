@@ -176,7 +176,9 @@ function startPlayEv() {
     setTimeout(() => {
         startHls();
         console.log("video play");
-    }, 3000);
+        trackReqFun("sub", "cur", null);
+        trackReqFun("audio", "cur", null);
+    }, 1000);
     showPlayer();
 }
 
@@ -214,24 +216,41 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleButton.addEventListener('click', toggleElements);
 
 });
+const trackReq = {	sub: 0,	audio: 1,	cycle: 2,	getCurrent: 3 }
 
+async function trackReqFun(which, reqtype, index){
+    let field = which == "sub" ? subtitleNameField : audioNameField;
+    try {
+        const response = await fetch('/mpv-track-req', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ which: which, reqtype: reqtype, index: index }),
+        });
+        const data = await response.json();
+        console.log(data);
+        field.innerText = data.reqRes.title ? data.reqRes.title : data.reqRes.lang;
+
+    } catch (error) {
+        console.error('Error:', error);
+        field.innerText = 'Error occurred. Please try again.';
+    }
+}
 
 const subtitleNameField = document.getElementById('subtitle-name');
 const subCycleBtn =  document.getElementById("subtitle-cycle-button");
+const audioNameField = document.getElementById('audio-track-name');
+const audioCycleBtn =  document.getElementById("audio-cycle-button");
+
 subCycleBtn.addEventListener('click', async () => {
-        try {
-            const response = await fetch('/mpv-sub-cycle', {
-                method: 'POST',
-            });
-            const data = await response.json();
-            subtitleNameField.innerText = data.curSub.title;
-            //console.log(data.curSub);
-        } catch (error) {
-            console.error('Error:', error);
-            subtitleNameField.innerText = 'Error occurred. Please try again.';
-        }
+        trackReqFun("sub", "cycle", null);
     });
 
+audioCycleBtn.addEventListener('click', async () => {
+        trackReqFun("audio", "cycle", null);
+
+    });
 const seekSlider = document.getElementById('seek-slider');
 const sliderValueDisplay = document.getElementById('slider-value');
 let debounceTimeout;

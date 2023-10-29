@@ -105,19 +105,26 @@ function startMpv(file) {
                     stream = str;
             aspectr = config.main.aspectRatio;
 
+            cropVF = "";
             const parts = aspectr.split(':');
             const awidth = parseInt(parts[0]);
             const aheight = parseInt(parts[1]);
-            let f = awidth / aheight, f2 = stream.width / stream.height;
-            let dif = Math.abs(f - f2);
-            cropVF = "";
             let newW = stream.width, newH = stream.height;
             let cropRes = "";
-            if (dif > 0.1) {
-                newH = stream.width / f;
-                cropRes = `${newW}:${parseInt(newH)}`
-                cropVF = `crop=${cropRes},`
-                console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
+            let f = awidth / aheight, f2 = stream.width / stream.height;
+
+            if (f > f2 ) {
+                let dif = Math.abs(f - f2);
+
+                if (dif > 0.03) {
+                    newH = stream.width / f;
+                    cropRes = `${newW}:${parseInt(newH)}`
+                    cropVF = `crop=${cropRes},`
+                    console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
+                }
+            }
+            else{
+                console.log("[WARNING] User aspectRatio (" +aspectr + ") ignored because it has to be more panoramic than input aspect ratio e.g: 21:9 for an 16:9 input",  )
             }
             function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
 
@@ -381,15 +388,29 @@ app.post('/mpv-pause-cycle', async (req, res) => {
     }
 });
 
-app.post('/mpv-sub-cycle', async (req, res) => {
+app.post('/mpv-track-req', async (req, res) => {
     try {
         console.log("Cycle subtitle");
+        const postData = req.body;
+        console.log(req.body)
+        if (player) {
+            if (req.body.reqtype == "cycle") {
+                player.command("cycle", req.body.which).then(sub => {
+                    player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
+                        res.json({ reqRes: mpvres });
+                    }).catch(
+                        (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
+                }).catch((error) => { console.log(error); res.json({ reqRes: { title: "Cycle failed" } }); })
+            } else {
+                player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
+                    res.json({ reqRes: mpvres });
+                }).catch(
+                    (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
+            }
 
-        player.command("cycle", "sub").then(sub => {
-            player.getProperty('current-tracks/sub').then(sub => {
-                res.json({ curSub: sub });
-            }).catch((error) => { console.log(error); })
-        }).catch((error) => { console.log(error); })
+        } else
+            res.json({ reqRes: { title: "No file playing" } });
+
 
     } catch (error) {
         console.error('Error  occurred:', error);
