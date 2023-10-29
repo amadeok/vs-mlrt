@@ -55,8 +55,11 @@ def get_plugins_path() -> str:
 plugins_path: str = get_plugins_path()
 trtexec_path: str =  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
 models_path: str = os.path.join(plugins_path, "models")
+inColab = False
 if os.path.isdir("/content/drive/MyDrive/rifef/models"):
-  models_path: str = os.path.join(plugins_path, "models")
+    models_path: str = os.path.join(plugins_path, "models")
+    inColab = True
+    #trtexec_path: str =  "LD_LIBRARY_PATH='/usr/lib64-nvidia' /usr/src/tensorrt/bin/trtexec"
 
 class Backend:
     @dataclass(frozen=False)
@@ -1293,15 +1296,29 @@ def trtexec(
     if trt_version >= 8600:
         args.append(f"--builderOptimizationLevel={builder_optimization_level}")
 
+    def runit(useSubp, check):
+        if useSubp:
+            assert(0)
+            return subprocess.run(args, env=env, check=check, stdout=sys.stderr)
+        else:
+            cmd = " ".join(args)
+            print("using os.system, ", cmd)
+            return os.system(cmd)
+
+    useSubp_ = 0;
     if log:
         env_key = "TRTEXEC_LOG_FILE"
         prev_env_value = os.environ.get(env_key)
-
+        env__ = dict(os.environ)
+        print("-----> LD_LIBRARY_PATH check before:",  env__['LD_LIBRARY_PATH'])
+        env__['LD_LIBRARY_PATH'] = '/usr/lib64-nvidia'
+        print("-----> LD_LIBRARY_PATH check after:",  env__['LD_LIBRARY_PATH'])
         if prev_env_value is not None and len(prev_env_value) > 0:
             # env_key has been set, no extra action
             env = {env_key: prev_env_value}
             print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-            subprocess.run(args, env=env, check=True, stdout=sys.stderr)
+            runit(useSubp_, True)
+            #subprocess.run(args, env=env, check=True, stdout=sys.stderr)
         else:
             time_str = time.strftime('%y%m%d_%H%M%S', time.localtime())
 
@@ -1312,22 +1329,24 @@ def trtexec(
 
             env = {env_key: log_filename}
             print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-            completed_process = subprocess.run(args, env=env, check=False, stdout=sys.stderr)
+            #completed_process = subprocess.run(args, env=env, check=False, stdout=sys.stderr)
+            runit(useSubp_, False)
 
-            if completed_process.returncode == 0:
-                try:
-                    os.remove(log_filename)
-                except FileNotFoundError:
-                    # maybe the official trtexec is used?
-                    pass
-            else:
-                if os.path.exists(log_filename):
-                    raise RuntimeError(f"trtexec execution fails, log has been written to {log_filename}")
-                else:
-                    raise RuntimeError(f"trtexec execution fails but no log is found")
+            # if completed_process.returncode == 0:
+            #     try:
+            #         os.remove(log_filename)
+            #     except FileNotFoundError:
+            #         # maybe the official trtexec is used?
+            #         pass
+            # else:
+            #     if os.path.exists(log_filename):
+            #         raise RuntimeError(f"trtexec execution fails, log has been written to {log_filename}")
+            #     else:
+            #         raise RuntimeError(f"trtexec execution fails but no log is found")
     else:
         print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-        subprocess.run(args, check=True, stdout=sys.stderr)
+        runit(useSubp_, True)
+        #subprocess.run(args, check=True, stdout=sys.stderr)
 
     return engine_path
 

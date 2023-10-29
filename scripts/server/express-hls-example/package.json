@@ -4,6 +4,7 @@
   "description": "Express, HLS를 사용한 간단한 동영상 스트리밍 예제",
   "main": "app.js",
   "scripts": {
+    "starttcp":  "node ./src/tcp.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./src/app.js",
     "watch": "nodemon ./src/app.js",

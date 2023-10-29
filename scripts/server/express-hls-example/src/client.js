@@ -52,6 +52,8 @@ function isPlayerRunning() {
     });
 }
 
+const TCPCheckbox = document.getElementById('tcp-checkbox');
+
 function createListElement(name, type, absPath, fileListElem) {
     const listItem = document.createElement('li');
     listItem.className = 'file-list-item';
@@ -85,17 +87,26 @@ function createListElement(name, type, absPath, fileListElem) {
             updateFilebrowser(absPath);
         } else if (type == "file") {
             console.log("play file ")
-            ret = fetch(`/mpv-play-file?file=${absPath}`)
-            ret
+
+            response = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
+            // const response = fetch("/mpv-play-file", {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify({ absPath: absPath, S: reqtype, index: index }),
+            // });
+            response
                 .then(response => response.json())
                 .then(data => {
-                    clearInterval(playInterval);
-                    if (hls) {
-                        hls.destroy();
+                    if (!TCPCheckbox.checked) {
+                        clearInterval(playInterval);
+                        if (hls) {
+                            hls.destroy();
+                        }
+                        video.pause();
+                        startPlayEv();
                     }
-                    video.pause();
-                    startPlayEv();
-
                     console.log('Play file server response:', data.trackList);
                 }).catch(error => { console.error('Error:', error); });
         }
@@ -216,9 +227,9 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleButton.addEventListener('click', toggleElements);
 
 });
-const trackReq = {	sub: 0,	audio: 1,	cycle: 2,	getCurrent: 3 }
+const trackReq = { sub: 0, audio: 1, cycle: 2, getCurrent: 3 }
 
-async function trackReqFun(which, reqtype, index){
+async function trackReqFun(which, reqtype, index) {
     let field = which == "sub" ? subtitleNameField : audioNameField;
     try {
         const response = await fetch('/mpv-track-req', {
@@ -239,18 +250,18 @@ async function trackReqFun(which, reqtype, index){
 }
 
 const subtitleNameField = document.getElementById('subtitle-name');
-const subCycleBtn =  document.getElementById("subtitle-cycle-button");
+const subCycleBtn = document.getElementById("subtitle-cycle-button");
 const audioNameField = document.getElementById('audio-track-name');
-const audioCycleBtn =  document.getElementById("audio-cycle-button");
+const audioCycleBtn = document.getElementById("audio-cycle-button");
 
 subCycleBtn.addEventListener('click', async () => {
-        trackReqFun("sub", "cycle", null);
-    });
+    trackReqFun("sub", "cycle", null);
+});
 
 audioCycleBtn.addEventListener('click', async () => {
-        trackReqFun("audio", "cycle", null);
+    trackReqFun("audio", "cycle", null);
 
-    });
+});
 const seekSlider = document.getElementById('seek-slider');
 const sliderValueDisplay = document.getElementById('slider-value');
 let debounceTimeout;
@@ -269,11 +280,11 @@ videoElement.onplaying = function () {
 };
 
 
-videoElement.addEventListener('seeking', function() {
+videoElement.addEventListener('seeking', function () {
     // Calculate the target seek position with low latency
     console.log("seeking list")
-  //  var targetSeekTime = videoElement.duration; // Seek forward by 5 seconds (you can adjust this value)
-    
+    //  var targetSeekTime = videoElement.duration; // Seek forward by 5 seconds (you can adjust this value)
+
     // Perform the seek operation
     // if (hls.media) {
     //     // Round the seek time to the nearest segment boundary for better accuracy

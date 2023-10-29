@@ -1,13 +1,18 @@
-var express = require("express");
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+
 const fs = require('fs');
 const hls = require('hls-server');
 let mpv = require('mpv-ipc');
-const { exec, spawnSync, ChildProcess } = require('child_process');
+const { exec, spawnSync, childProcess } = require('child_process');
+const child_process = require('child_process');
+
 var ffmpeg = require('fluent-ffmpeg');
 // var livereload = require("livereload");
 // var connectLiveReload = require("connect-livereload");
 //let path = require('path')
-var app = express();
+
 const bodyParser = require('body-parser'); // Middleware to parse the request body
 const path = require('path');
 const { start } = require("repl");
@@ -32,6 +37,7 @@ config.main.segmentBufferN = parseInt(config.main.segmentBufferN);
 config.main.useNvenc = parseInt(config.main.useNvenc);
 config.main.maxWidth = parseInt(config.main.maxWidth);
 config.debug.useChildSpawn = parseInt(config.debug.useChildSpawn)
+config.debug.useTCP = parseInt(config.debug.useTCP)
 
 const socketPath = '/tmp/mpvsocketr2';
 const streamPath = __dirname + "/stream/";
@@ -40,10 +46,11 @@ inputFile = "/home/amadeok/Downloads/bnha92.mkv"
 const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 
-let args = [
+let streamArgs = [
     "--oac=aac", "--of=ssegment", "--ofopts=segment_time=2,segment_format=mpegts,segment_list_size=0,"
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
-    "--input-ipc-server=/tmp/mpvsocketr2", "--o=" + streamPath + "/str%06d.ts"];
+     "--o=" + streamPath + "/str%06d.ts", ];
+let otherArgs = ["--input-ipc-server=/tmp/mpvsocketr2", "-idle"]
 
 let player = null;
 let latestSSegment = null;
@@ -84,6 +91,57 @@ function setMPVnice() {
     });
 }
 
+function getArgs(stream, file) {
+
+    let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : " ";
+    binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
+
+    aspectr = config.main.aspectRatio;
+
+    cropVF = "";
+    const parts = aspectr.split(':');
+    const awidth = parseInt(parts[0]);
+    const aheight = parseInt(parts[1]);
+    let newW = stream.width, newH = stream.height;
+    let cropRes = "";
+    let f = awidth / aheight, f2 = stream.width / stream.height;
+
+    if (f > f2) {
+        let dif = Math.abs(f - f2);
+
+        if (dif > 0.03) {
+            newH = stream.width / f;
+            cropRes = `${newW}:${parseInt(newH)}`
+            cropVF = `crop=${cropRes},`
+            console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
+        }
+    }
+    else {
+        console.log("[WARNING] User aspectRatio (" + aspectr + ") ignored because it has to be more panoramic than input aspect ratio e.g: 21:9 for an 16:9 input",)
+    }
+    function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
+
+    videow = stream.width;
+    if (videow > config.main.maxWidth && 1) {
+        var varr = (config.main.maxWidth / videow) * newH;
+        newW = rNearestMultfTwo(config.main.maxWidth), newH = rNearestMultfTwo(varr);
+        resizeVF = `lavfi=[scale=${newW}:${newH}],`
+        console.log(`Automatic downscaling:     ${cropRes} -> ${newW}:${newH}`)
+    }
+
+    let vfarg = "--vf='" + cropVF + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
+        + "vs-mlrt/scripts/test3.py]':4:8";
+    // vfarg = "";
+
+    enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
+
+
+
+
+    return {enc_args: enc_args, vfarg: vfarg, binary: binary};
+}
+
+
 function startMpv(file) {
     ffmpeg.setFfprobePath("ffprobe");
     resizeVF = ""
@@ -103,59 +161,17 @@ function startMpv(file) {
             for (var str of metadata.streams)
                 if (str.codec_type == "video")
                     stream = str;
-            aspectr = config.main.aspectRatio;
 
-            cropVF = "";
-            const parts = aspectr.split(':');
-            const awidth = parseInt(parts[0]);
-            const aheight = parseInt(parts[1]);
-            let newW = stream.width, newH = stream.height;
-            let cropRes = "";
-            let f = awidth / aheight, f2 = stream.width / stream.height;
-
-            if (f > f2 ) {
-                let dif = Math.abs(f - f2);
-
-                if (dif > 0.03) {
-                    newH = stream.width / f;
-                    cropRes = `${newW}:${parseInt(newH)}`
-                    cropVF = `crop=${cropRes},`
-                    console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
-                }
-            }
-            else{
-                console.log("[WARNING] User aspectRatio (" +aspectr + ") ignored because it has to be more panoramic than input aspect ratio e.g: 21:9 for an 16:9 input",  )
-            }
-            function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
-
-            videow = stream.width;
-            if (videow > config.main.maxWidth && 1) {
-                var varr = (config.main.maxWidth / videow) * newH;
-                newW = rNearestMultfTwo(config.main.maxWidth), newH = rNearestMultfTwo(varr);
-                resizeVF = `lavfi=[scale=${newW}:${newH}],`
-                console.log(`Automatic downscaling:     ${cropRes} -> ${newW}:${newH}`)
-            }
-
-
-            let vfarg = "--vf='" + cropVF + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
-                + "vs-mlrt/scripts/test3.py]':4:8";
-            // vfarg = "";
-
-            let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " + " sudo nice -n -20 " : "sudo nice -n -20 ";
-            binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : " ";
-
-            binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
-            enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
-
-            let strArgs = binary + " '" + file + "' " + enc_args.join(" ") + " " + vfarg + " " + args.join(" ");
+            let args = getArgs(stream, file);
+            let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ")+ otherArgs.join(" ");
             console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
             if (config.debug.useChildSpawn) {
                 file = ' "' + file + '" ';
-                let listArgs = [file, ...enc_args, vfarg, ...args];
-                console.log("\n---> MPV COMAND (arr): \n ", binary, listArgs, "\n");
+                let listArgs = [file, ...args.enc_args, args.vfarg, ...streamArgs, ...otherArgs];
+                console.log("\n---> MPV COMAND (arr): \n ", args.binary, listArgs, "\n");
 
-                const childProcess = spawn(binary, listArgs, {
+                const cp = spawn(args.binary, listArgs, {
                     stdio: 'inherit',
                     shell: true
                 });
@@ -164,7 +180,6 @@ function startMpv(file) {
                 // try {
                 //     const stdout = execSync('ps aux | grep mpv').toString();
                 //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
-
                 //     processes.forEach(processInfo => {
                 //         const columns = processInfo.trim().split(/\s+/);
                 //         const pid = columns[1];
@@ -186,7 +201,7 @@ function startMpv(file) {
                 //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
             }
             else {
-                exec(strArgs, (error, stdout, stderr) => {
+                exec(args.strArgs, (error, stdout, stderr) => {
                     if (error) { console.error(`Error occurred: ${error.message}`); return; }
                     if (stderr) { console.error(`stderr: ${stderr}`); return; }
                     console.log(`stdout: ${stdout}`);
@@ -266,17 +281,17 @@ function startMpvEv(file) {
 
 //const player = new mpv.MPVClient(socketPath);
 
-let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
-    console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
+// let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
+//     console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
 
-    if (inColab) {
-        const ngrok = require('ngrok');
-        (async function () {
-            const url = await ngrok.connect(config.main.port);
-            console.log(`Server is accessible from the internet at: ${url}`);
-        })();
-    }
-});
+//     if (inColab) {
+//         const ngrok = require('ngrok');
+//         (async function () {
+//             const url = await ngrok.connect(config.main.port);
+//             console.log(`Server is accessible from the internet at: ${url}`);
+//         })();
+//     }
+// });
 
 //app.use(express.static(__dirname + '/public'));
 
@@ -344,26 +359,183 @@ function checkFile(filePath, callback) {
         }
     });
 }
+
+
+function tcpPlay(file, req, res) {
+    ffmpeg.setFfprobePath("ffprobe");
+    resizeVF = ""
+    ffmpeg.ffprobe(file, function (err, metadata) {
+        if (err) {
+            console.error(err);
+        } else {
+            if (file == undefined) file = inputFile;
+            if (player != null) player.command("quit");
+            player = null;
+
+            let stream = null;
+            for (var str of metadata.streams)
+                if (str.codec_type == "video")
+                    stream = str;
+
+            let args = getArgs(stream, file);
+
+            res.setHeader('Content-Type', 'video/mpegts');
+
+            const pathToFifo = '/tmp/mpvfifo2';
+
+            try {
+                fs.unlinkSync(pathToFifo);
+                child_process.spawnSync("mkfifo", [pathToFifo]);
+            } catch (err) { console.error(`Error deleting named pipe: ${err.message}`); }
+
+            let listArgs = [ `'${file}'`, "--of=mpegts", ...args.enc_args, args.vfarg, "-o", pathToFifo, ...otherArgs ];
+            const ffmpegProcess = spawn(args.binary, listArgs, {  //  stdio: 'inherit',   
+                shell: true
+            });
+            setTimeout(() => {
+                const pl = new mpv.MPVClient(socketPath);
+                //pl.command("cycle", "pause");
+                //pl.command("quit");
+                player = pl;
+            }, 500);
+
+            if (fs.existsSync(pathToFifo)) {
+                const fifoStream = fs.createReadStream(pathToFifo);
+                //  fifoStream.on('data', (data) => {
+                //    res.send(data);
+                // //   //console.log('Received data from FIFO:', data.toString());
+
+                //  });
+                fifoStream.pipe(res)
+
+                fifoStream.on('error', (err) => { console.error('Error reading from FIFO:', err); });
+                fifoStream.on('end', () => { console.log('End of FIFO stream'); });
+            } else { console.error('FIFO file does not exist.'); }
+
+            //ffmpegProcess.stdout.pipe(res);
+
+            ffmpegProcess.stderr.on('data', (data) => {
+                console.error(`FFmpeg stderr: ${data}`);
+            });
+
+            ffmpegProcess.on('close', (code) => {
+                if (code !== 0) {
+                    console.error(`FFmpeg process exited with code ${code}`);
+                }
+            });
+
+            req.on('close', () => {
+                console.log("Connection closed ")
+                if (player != null) player.command("quit");
+
+                ffmpegProcess.kill();
+            });
+        }
+    });
+}
+
+app.get('/video', (req, res) => {
+    tcpPlay(inputFile, req, res)
+});
+
+
+app.get('/video2', (req, res) => {
+
+    res.setHeader('Content-Type', 'video/mpegts');
+  
+    const pathToFifo = '/tmp/mpvfifo2';
+  
+    try {
+      fs.unlinkSync(pathToFifo);
+      child_process.spawnSync("mkfifo", [pathToFifo]);
+  
+      child_process.spawnSync("mkfifo", [pathToFifo]);
+    } catch (err) {
+      console.error(`Error deleting named pipe: ${err.message}`);
+    }
+  
+  
+    const ffmpegProcess = child_process.spawn('mpv', [
+      //'/home/amadeok/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
+      '"/home/amadeok/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
+      //'--no-cache',
+      // "--o=-",
+      "--of=mpegts",
+      //"--ovc=copy",
+      //  "--oac=pcm_s16le",
+      "--ovc=h264_nvenc",
+      "--ovcopts-add=preset=p1",
+      "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+      //  "--vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+      "-o",
+      pathToFifo
+      //"-"
+    ], {
+      //  stdio: 'inherit',
+      shell: true
+    });
+  
+  
+    if (fs.existsSync(pathToFifo)) {
+      const fifoStream = fs.createReadStream(pathToFifo);
+      //  fifoStream.on('data', (data) => {
+      //    res.send(data);
+      // //   //console.log('Received data from FIFO:', data.toString());
+  
+      //  });
+      fifoStream.pipe(res)
+  
+      fifoStream.on('error', (err) => { console.error('Error reading from FIFO:', err); });
+      fifoStream.on('end', () => { console.log('End of FIFO stream'); });
+    } else { console.error('FIFO file does not exist.'); }
+  
+    //ffmpegProcess.stdout.pipe(res);
+  
+    ffmpegProcess.stderr.on('data', (data) => {
+      console.error(`FFmpeg stderr: ${data}`);
+    });
+  
+    ffmpegProcess.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`FFmpeg process exited with code ${code}`);
+      }
+    });
+  
+    req.on('close', () => {
+      ffmpegProcess.kill();
+    });
+  });
+  
+
 app.get('/mpv-play-file', (req, res) => {
 
     const file = req.query.file || ''; // Get subfolder path from query parameter
+    const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
+
     const file_path = path.join(config.main.mediadir, file);
-    console.log('Requested file:', file_path);
+    console.log('Requested file:', file_path, " ; useTCP ", useTCP);
     if (fs.existsSync(file_path)) {
-        startMpvEv(file_path);
-        setTimeout(() => {
+        if (!useTCP) {
+            startMpvEv(file_path);
+            setTimeout(() => {
 
-            checkFile(streamPath + "str000002.ts", () => {
-                console.log(`File ${streamPath + "str000002.ts"} exists.`);
+                checkFile(streamPath + "str000002.ts", () => {
+                    console.log(`File ${streamPath + "str000002.ts"} exists.`);
 
-                player.getProperty('track-list').then(tr => {
-                    console.log("Got file track-list");
-                    res.json({ trackList: tr });
-                }).catch((error) => { console.log(error); })
+                    player.getProperty('track-list').then(tr => {
+                        console.log("Got file track-list");
+                        res.json({ trackList: tr });
+                    }).catch((error) => { console.log(error); })
 
-                //res.json({ message: 'File exists, opening...' });
-            });        //
-        }, 1000);
+                    //res.json({ message: 'File exists, opening...' });
+                });        //
+            }, 1000);
+           
+        }else{
+            inputFile = file_path;
+            console.log("Can open video with player ", inputFile);
+            res.json({ trackList: inputFile });
+        }
 
     } else {
         res.status(500).json({ error: "Error file doesn't exist" });
@@ -469,7 +641,11 @@ app.get('/mpv-is-player', (req, res) => {
 //   res.sendFile(videoPath);
 // });
 
-
+// Start the Express server
+let server = http.listen(3000, "192.168.1.160", () => {
+    console.log(`HTTP DIRECT Server is running on port ${3001}`);
+  });
+  
 
 new hls(server, {
     provider: {
@@ -503,3 +679,4 @@ new hls(server, {
         }
     }
 });
+
