@@ -1,6 +1,6 @@
 const express = require('express');
 const app = express();
-const http = require('http').Server(app);
+//const http = require('http').Server(app);
 
 const fs = require('fs');
 const hls = require('hls-server');
@@ -23,13 +23,12 @@ const ini = require('ini');
 // liveReloadServer.watch(path.join(__dirname, 'public'));
 
 // app.use(connectLiveReload());
-app.use(bodyParser.json());
+app.use(bodyParser.json()); // THIS BREAKS /VIDEO METHOD
 
 let inColab = false;
 googleDrivePath = '/content/drive/MyDrive';
 if (fs.existsSync(googleDrivePath))
     inColab = true
-
 const configFile = inColab ? googleDrivePath + '/rifef/configColab.ini' : __dirname + "/config.ini";
 const fileContent = fs.readFileSync(configFile, 'utf8');
 config = ini.parse(fileContent);
@@ -37,7 +36,10 @@ config.main.segmentBufferN = parseInt(config.main.segmentBufferN);
 config.main.useNvenc = parseInt(config.main.useNvenc);
 config.main.maxWidth = parseInt(config.main.maxWidth);
 config.debug.useChildSpawn = parseInt(config.debug.useChildSpawn)
-config.debug.useTCP = parseInt(config.debug.useTCP)
+config.main.pausePlayTimeMult = parseInt(config.main.pausePlayTimeMult)
+config.main.segmentTime = parseInt(config.main.segmentTime);
+
+let usetimerPauser = false;
 
 const socketPath = '/tmp/mpvsocketr2';
 const streamPath = __dirname + "/stream/";
@@ -47,17 +49,22 @@ const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 
 let streamArgs = [
-    "--oac=aac", "--of=ssegment", "--ofopts=segment_time=2,segment_format=mpegts,segment_list_size=0,"
+    "--oac=aac", "--of=ssegment", `--ofopts=segment_time=${config.main.segmentTime},segment_format=mpegts,segment_list_size=25,`
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
-     "--o=" + streamPath + "/str%06d.ts", ];
-let otherArgs = ["--input-ipc-server=/tmp/mpvsocketr2", "-idle"]
+    "--o=" + streamPath + "/str%06d.ts",];
+let otherArgs = ["--input-ipc-server=/tmp/mpvsocketr2", "-idle",
+    "--really-quiet"
+]
 
 let player = null;
 let latestSSegment = null;
 let latestCSegment = null;
 let latestSSegmentInt = null;
+let timerPauseTimeout = null;
+let clientPos = null;
 const { spawn } = require('child_process');
 const { execSync } = require('child_process');
+const { setTimeout } = require('timers');
 
 function setMPVnice() {
     const findProcessCommand = 'ps aux | grep mpv'; // Command to find MPV process
@@ -138,7 +145,7 @@ function getArgs(stream, file) {
 
 
 
-    return {enc_args: enc_args, vfarg: vfarg, binary: binary};
+    return { enc_args: enc_args, vfarg: vfarg, binary: binary };
 }
 
 
@@ -163,7 +170,7 @@ function startMpv(file) {
                     stream = str;
 
             let args = getArgs(stream, file);
-            let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ")+ otherArgs.join(" ");
+            let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
             console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
             if (config.debug.useChildSpawn) {
@@ -207,8 +214,8 @@ function startMpv(file) {
                     console.log(`stdout: ${stdout}`);
                 });
             }
-
-            latestSSegmentInt = setInterval(getLatestHLSSegmentF, 3000);
+            // if (!usetimerPauser)
+            //     latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
 
             setTimeout(() => {
                 const pl = new mpv.MPVClient(socketPath);
@@ -281,17 +288,7 @@ function startMpvEv(file) {
 
 //const player = new mpv.MPVClient(socketPath);
 
-// let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
-//     console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
 
-//     if (inColab) {
-//         const ngrok = require('ngrok');
-//         (async function () {
-//             const url = await ngrok.connect(config.main.port);
-//             console.log(`Server is accessible from the internet at: ${url}`);
-//         })();
-//     }
-// });
 
 //app.use(express.static(__dirname + '/public'));
 
@@ -388,7 +385,7 @@ function tcpPlay(file, req, res) {
                 child_process.spawnSync("mkfifo", [pathToFifo]);
             } catch (err) { console.error(`Error deleting named pipe: ${err.message}`); }
 
-            let listArgs = [ `'${file}'`, "--of=mpegts", ...args.enc_args, args.vfarg, "-o", pathToFifo, ...otherArgs ];
+            let listArgs = [`'${file}'`, "--of=mpegts", ...args.enc_args, args.vfarg, "-o", pathToFifo, ...otherArgs];
             const ffmpegProcess = spawn(args.binary, listArgs, {  //  stdio: 'inherit',   
                 shell: true
             });
@@ -442,70 +439,70 @@ app.get('/video', (req, res) => {
 app.get('/video2', (req, res) => {
 
     res.setHeader('Content-Type', 'video/mpegts');
-  
+
     const pathToFifo = '/tmp/mpvfifo2';
-  
+
     try {
-      fs.unlinkSync(pathToFifo);
-      child_process.spawnSync("mkfifo", [pathToFifo]);
-  
-      child_process.spawnSync("mkfifo", [pathToFifo]);
+        fs.unlinkSync(pathToFifo);
+        child_process.spawnSync("mkfifo", [pathToFifo]);
+
+        child_process.spawnSync("mkfifo", [pathToFifo]);
     } catch (err) {
-      console.error(`Error deleting named pipe: ${err.message}`);
+        console.error(`Error deleting named pipe: ${err.message}`);
     }
-  
-  
+
+
     const ffmpegProcess = child_process.spawn('mpv', [
-      //'/home/amadeok/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
-      '"/home/amadeok/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
-      //'--no-cache',
-      // "--o=-",
-      "--of=mpegts",
-      //"--ovc=copy",
-      //  "--oac=pcm_s16le",
-      "--ovc=h264_nvenc",
-      "--ovcopts-add=preset=p1",
-      "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
-      //  "--vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
-      "-o",
-      pathToFifo
-      //"-"
+        //'/home/amadeok/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
+        '"/home/amadeok/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
+        //'--no-cache',
+        // "--o=-",
+        "--of=mpegts",
+        //"--ovc=copy",
+        //  "--oac=pcm_s16le",
+        "--ovc=h264_nvenc",
+        "--ovcopts-add=preset=p1",
+        "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+        //  "--vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+        "-o",
+        pathToFifo
+        //"-"
     ], {
-      //  stdio: 'inherit',
-      shell: true
+        //  stdio: 'inherit',
+        shell: true
     });
-  
-  
+
+
     if (fs.existsSync(pathToFifo)) {
-      const fifoStream = fs.createReadStream(pathToFifo);
-      //  fifoStream.on('data', (data) => {
-      //    res.send(data);
-      // //   //console.log('Received data from FIFO:', data.toString());
-  
-      //  });
-      fifoStream.pipe(res)
-  
-      fifoStream.on('error', (err) => { console.error('Error reading from FIFO:', err); });
-      fifoStream.on('end', () => { console.log('End of FIFO stream'); });
+        const fifoStream = fs.createReadStream(pathToFifo);
+        //  fifoStream.on('data', (data) => {
+        //    res.send(data);
+        // //   //console.log('Received data from FIFO:', data.toString());
+
+        //  });
+        fifoStream.pipe(res)
+
+        fifoStream.on('error', (err) => { console.error('Error reading from FIFO:', err); });
+        fifoStream.on('end', () => { console.log('End of FIFO stream'); });
     } else { console.error('FIFO file does not exist.'); }
-  
+
     //ffmpegProcess.stdout.pipe(res);
-  
+
     ffmpegProcess.stderr.on('data', (data) => {
-      console.error(`FFmpeg stderr: ${data}`);
+        console.error(`FFmpeg stderr: ${data}`);
     });
-  
+
     ffmpegProcess.on('close', (code) => {
-      if (code !== 0) {
-        console.error(`FFmpeg process exited with code ${code}`);
-      }
+        if (code !== 0) {
+            console.error(`FFmpeg process exited with code ${code}`);
+        }
     });
-  
+
     req.on('close', () => {
-      ffmpegProcess.kill();
+        ffmpegProcess.kill();
     });
-  });
-  
+});
+
 
 app.get('/mpv-play-file', (req, res) => {
 
@@ -519,19 +516,20 @@ app.get('/mpv-play-file', (req, res) => {
             startMpvEv(file_path);
             setTimeout(() => {
 
-                checkFile(streamPath + "str000002.ts", () => {
-                    console.log(`File ${streamPath + "str000002.ts"} exists.`);
+                checkFile(streamPath + "str000001.ts", () => {
+                    console.log(`File ${streamPath + "str000001.ts"} exists.`);
 
                     player.getProperty('track-list').then(tr => {
                         console.log("Got file track-list");
                         res.json({ trackList: tr });
+                        //if (usetimerPauser) timedPaused();
                     }).catch((error) => { console.log(error); })
 
                     //res.json({ message: 'File exists, opening...' });
                 });        //
             }, 1000);
-           
-        }else{
+
+        } else {
             inputFile = file_path;
             console.log("Can open video with player ", inputFile);
             res.json({ trackList: inputFile });
@@ -592,13 +590,14 @@ app.post('/mpv-track-req', async (req, res) => {
 
 app.post('/mpv-seek', (req, res) => {
     const sliderValue = req.body.sliderValue;
-
+    //clientPos = 0;
     player.getDuration()
         .then((duration) => {
 
             let newPos = (sliderValue / 1000) * duration;
             console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
             player.seek(newPos, 'absolute');
+            //    if (usetimerPauser) timedPaused();
         })
         .catch((error) => { console.log(error); })
 
@@ -606,13 +605,36 @@ app.post('/mpv-seek', (req, res) => {
 });
 
 
-app.get('/mpv-get-perc-pos', (req, res) => {
+app.post('/mpv-get-perc-pos', (req, res) => {
 
+    const clientPlaybackD = req.body.clientPlaybackD;
     player.getDuration()
         .then((duration) => {
             player.getProperty('playback-time').then(pos => {
                 let sliderPos = (pos / duration) * 1000;
-                console.log('playback time', pos, " slider pos: ", sliderPos, " Dur: ", duration);
+                let delta = clientPlaybackD;
+                console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+
+                //if (clientPos)
+                    if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
+                        player.getProperty("pause")
+                            .then((res) => {
+                                if (!res) {
+                                    console.log("---> pausing delta <--- \n")
+                                    player.pause();
+                                }
+                            }).catch((e) => { console.log(e) });
+                    }
+                    else {
+                        player.getProperty("pause")
+                            .then((res) => {
+                                if (res) {
+                                    console.log("---> resuming delta <--- \n")
+                                    player.resume();
+                                }
+                            }).catch((e) => { console.log(e) });
+                    }
+
                 res.send({ number: sliderPos });
             }).catch((error) => { console.log(error); })
 
@@ -642,10 +664,43 @@ app.get('/mpv-is-player', (req, res) => {
 // });
 
 // Start the Express server
-let server = http.listen(3000, "192.168.1.160", () => {
-    console.log(`HTTP DIRECT Server is running on port ${3001}`);
-  });
-  
+
+// let server = http.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
+//         console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
+
+//         if (inColab) {
+//             const ngrok = require('ngrok');
+//             (async function () {
+//                 const url = await ngrok.connect(config.main.port);
+//                 console.log(`Server is accessible from the internet at: ${url}`);
+//             })();
+//         }
+//     });
+
+function timedPaused(customtime) {
+    if (!player) return;
+    if (timerPauseTimeout)
+        clearTimeout(timerPauseTimeout);
+
+    player.resume();
+    let time = customtime ? customtime : Math.max(config.main.segmentTime * 4 * 1000, 20 * 1000)
+    timerPauseTimeout = setTimeout(() => {
+        console.log("----> timed pause ", time)
+        player.pause();
+    }, time);
+}
+
+let server = app.listen(config.main.port, inColab ? "127.0.0.1" : config.main.host, () => {
+    console.log(`Server is listening at http://${config.main.host}:${config.main.port}`);
+
+    if (inColab) {
+        const ngrok = require('ngrok');
+        (async function () {
+            const url = await ngrok.connect(config.main.port);
+            console.log(`Server is accessible from the internet at: ${url}`);
+        })();
+    }
+});
 
 new hls(server, {
     provider: {
@@ -655,11 +710,14 @@ new hls(server, {
             if (ext !== 'm3u8' && ext !== 'ts') {
                 return cb(null, true);
             }
-            if (ext == 'ts') {
+            if (!ext == 'ts') {
                 const regex = /(\d+)/;
                 const number = req.url.match(regex)[0];
                 latestCSegment = parseInt(number, 10);
             }
+            //  else if (usetimerPauser && ext == 'ts') {
+            //     timedPaused();
+            // }
             console.log("GET received: " + req.url)
             fs.access(__dirname + req.url, fs.constants.F_OK, function (err) {
                 if (err) {

@@ -3,6 +3,7 @@ const playPauseBtn = document.getElementById('triggerButton');
 const fileListElem = document.getElementById('file-list');
 const videoElement = document.getElementById('video');
 const toggleButton = document.getElementById('toggle-button');
+var currentSegmentStartTime = 0;
 let hls = null;
 let playInterval = null;
 
@@ -53,7 +54,7 @@ function isPlayerRunning() {
 }
 
 const TCPCheckbox = document.getElementById('tcp-checkbox');
-
+let requestingFile = false;
 function createListElement(name, type, absPath, fileListElem) {
     const listItem = document.createElement('li');
     listItem.className = 'file-list-item';
@@ -86,29 +87,35 @@ function createListElement(name, type, absPath, fileListElem) {
             console.log("browser file update up folder")
             updateFilebrowser(absPath);
         } else if (type == "file") {
-            console.log("play file ")
-
-            response = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
-            // const response = fetch("/mpv-play-file", {
-            //     method: 'POST',
-            //     headers: {
-            //         'Content-Type': 'application/json',
-            //     },
-            //     body: JSON.stringify({ absPath: absPath, S: reqtype, index: index }),
-            // });
-            response
-                .then(response => response.json())
-                .then(data => {
-                    if (!TCPCheckbox.checked) {
-                        clearInterval(playInterval);
-                        if (hls) {
-                            hls.destroy();
+            if (requestingFile)
+                alert("Please wait, requesting file");
+            else {
+                console.log("play file ")
+                requestingFile = true;
+                response = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
+                // const response = fetch("/mpv-play-file", {
+                //     method: 'POST',
+                //     headers: {
+                //         'Content-Type': 'application/json',
+                //     },
+                //     body: JSON.stringify({ absPath: absPath, S: reqtype, index: index }),
+                // });
+                response
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!TCPCheckbox.checked) {
+                            clearInterval(playInterval);
+                            if (hls) {
+                                hls.destroy();
+                            }
+                            video.pause();
+                            startPlayEv();
                         }
-                        video.pause();
-                        startPlayEv();
-                    }
-                    console.log('Play file server response:', data.trackList);
-                }).catch(error => { console.error('Error:', error); });
+                        console.log('Play file server response:', data.trackList);
+                    })
+                    .catch(error => { console.error('Error:', error); })
+                    .finally(() => { requestingFile = false; });
+            }
         }
         // Prevent the default behavior of the link (e.g., navigating to a different page)
         return false;
@@ -171,7 +178,10 @@ function startHls() {
         hls.loadSource(videoSrc);
         hls.attachMedia(videoElement);
         ///hls.config.backBufferLength = 0; // Set the back buffer length in seconds
-
+        hls.on(Hls.Events.FRAG_CHANGED, function (event, data) {
+            //  var currentFrag = hls.levels[hls.currentLevel].details.fragments[data.frag.cc];
+            currentSegmentStartTime = data.frag.start;
+        });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             videoElement.play();
         });
@@ -183,7 +193,7 @@ function startHls() {
     }
 }
 function startPlayEv() {
-    playInterval = setInterval(makeRequest, 2000);
+    playInterval = setInterval(makeRequest, 4000);
     setTimeout(() => {
         startHls();
         console.log("video play");
@@ -379,7 +389,16 @@ async function makeRequest() {
     try {
         // console.log("mreq ", bSeeking)
         if (!bSeeking) {
-            const response = await fetch('/mpv-get-perc-pos');
+            let frags = hls.levels[hls.currentLevel].details.fragments;
+            let last = frags[frags.length - 1];
+            let d = last.start - currentSegmentStartTime;
+            const response = await fetch('/mpv-get-perc-pos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ clientPlaybackD: d }),
+            });
             const data = await response.json();
             document.getElementById('seek-slider').value = data.number;
         }
