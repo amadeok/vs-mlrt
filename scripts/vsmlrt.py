@@ -26,10 +26,17 @@ import zlib
 import vapoursynth as vs
 from vapoursynth import core
 trtpath = ""
-if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
-    trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
-elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
-    trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
+
+
+
+if sys.platform.startswith('linux'):
+    if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
+        trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
+    elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
+        trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
+elif sys.platform.startswith('win'):
+    trtpath= r"E:\Users\amade\rifef\VSTRT\vstrt.dll"
+  
 
 core.std.LoadPlugin(path=trtpath)
 
@@ -53,7 +60,7 @@ def get_plugins_path() -> str:
     return os.path.dirname(path).decode()
 
 plugins_path: str = get_plugins_path()
-trtexec_path: str =  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
+trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec") if sys.platform.startswith('win') else  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
 models_path: str = os.path.join(plugins_path, "models")
 inColab = False
 if os.path.isdir("/content/drive/MyDrive/rifef/models"):
@@ -1305,14 +1312,15 @@ def trtexec(
             print("using os.system, ", cmd)
             return os.system(cmd)
 
-    useSubp_ = 0;
+    useSubp_ =  sys.platform.startswith('linux');
     if log:
         env_key = "TRTEXEC_LOG_FILE"
         prev_env_value = os.environ.get(env_key)
         env__ = dict(os.environ)
-        print("-----> LD_LIBRARY_PATH check before:",  env__['LD_LIBRARY_PATH'])
-        env__['LD_LIBRARY_PATH'] = '/usr/lib64-nvidia'
-        print("-----> LD_LIBRARY_PATH check after:",  env__['LD_LIBRARY_PATH'])
+        if sys.platform.startswith('linux'):
+            print("-----> LD_LIBRARY_PATH check before:",  env__['LD_LIBRARY_PATH'])
+            env__['LD_LIBRARY_PATH'] = '/usr/lib64-nvidia'
+            print("-----> LD_LIBRARY_PATH check after:",  env__['LD_LIBRARY_PATH'])
         if prev_env_value is not None and len(prev_env_value) > 0:
             # env_key has been set, no extra action
             env = {env_key: prev_env_value}
