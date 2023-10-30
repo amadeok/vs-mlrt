@@ -8,7 +8,7 @@ R61
 R61
 
 !git clone -b R61 https://github.com/vapoursynth/vapoursynth
-pip3 install cython<3
+pip3 install "cython<3"
 
 sudo dpkg -i cudnn-local-repo-$distro-8.x.x.x_1.0-1_amd64.deb
 
@@ -41,7 +41,7 @@ sudo apt install -y build-essential
 sudo apt install -y gcc-10 g++-10 cpp-10
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10
 
-
+/content/mlrt/vs-mlrt/vstrt/build/libvstrt.so
 
 
 sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
@@ -85,5 +85,258 @@ cd /home/amadeok/vs-mlrt/models/rife/
  
 trtexec --onnx=rife_v4.6.onnx --timingCacheFile=rife_v4.6.onnx.1920x1088_fp16_trt-8502_cudnn_I-fp16_O-fp16_NVIDIA-GeForce-RTX-4090_3dcbe72f.engine.cache --device=0 --saveEngine=72f.engine --shapes=input:1x11x1088x1920 --fp16 --tacticSources=-CUBLAS,-CUBLAS_LT --useCudaGraph --noDataTransfers --inputIOFormats=fp16:chw --outputIOFormats=fp16:chw
 
+
+
+---------------------------------------------
+meson
+
+https://www.vapoursynth.com/doc/installation.html
+
+sudo apt install libgtk-3-dev
+
+sudo apt install meson
+
+git clone https://github.com/vapoursynth/bestsource
+sudo apt-get install -y libjansson-dev
+
+
+cd bestsource
+
+git clone https://github.com/sekrit-twc/libp2p
+
+sudo meson setup /build
+------------------------------------------------
+    ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -profile:v baseline -level 3.0 -s 840x560 -start_number 0 -hls_list_size 0 -f hls out.m3u8
+
+
+ffmpeg -i $(vspipe -y -s stream.py -) -c:v h264 -c:a aac -strict experimental -f hls -hls_time 10 -hls_list_size 6 -hls_wrap 10 output.m3u8
+
+ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264 -c:a aac -strict experimental -f hls -hls_time 10 -hls_list_size 6 -hls_wrap 10 output.m3u8
+
+
+ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264 -c:a aac -strict experimental -f hls -hls_time 10 -hls_list_size 6 -hls_wrap 10 -master_pl_name master.m3u8 output_%03d.ts
+
+python3 -m http.server --bind 192.168.1.160
+
+ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264 -c:a aac -strict -2 -f hls -hls_time 10 -hls_list_size 6 -hls_flags delete_segments -timeout 3000000 stream.m3u8
+
+
+"C:\Program Files (x86)\SVP 4\mpv64\mpv.exe"  D:/1.mkv --aid=1 --sid=no --no-sub-auto --no-ytdl --o=C:/Users/amade/AppData/Local/Temp/svpcast/stream/svp%04d.ts --input-ipc-server=mpvstreampipe --input-media-keys=no --no-msg-color --hwdec=auto-copy --video-crop=0x0+0+0 --vf=vapoursynth:[C:\Users\amade\AppData\Roaming\SVP4\scripts\fffe.py]:4:8 --ovc=libx264 --ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=24 --oac=aac --of=ssegment --ofopts=segment_time=4,segment_format=mpegts,segment_list_size=25,segment_start_number=0,segment_list_flags=+live,segment_list=[C:\Users\amade\AppData\Local\Temp\svpcast\stream\svp.m3u8]
+
+net usershare add --long share /home/amadeok/vs-mlrt/stream "comment" "Everyone:R" guest_ok=n
+
+sudo smbpasswd -a amadeok
+
+sudo systemctl restart smbd
+
+----------------------------------------------------
+build mpv
+mpv v0.36.0-618-g9ea9279cf4-dirty Copyright © 2000-2023 mpv/MPlayer/mplayer2 projects
+
+may have to delete build directory
+sudo apt-get install -y libavfilter-dev libass-dev libxpresent-dev  libcdio-dev   libcdio-paranoia-dev  libopenal-dev  libdvdnav-dev  liblua5.2-dev libplacebo-dev
+
+mason-options.txt:
+
+option('cdda', type: 'feature', value: 'enabled', description: 'cdda support (libcdio)')
+option('x11', type: 'feature', value: 'enabled', description: 'X11')                                                          
+option('vdpau-gl-x11', type: 'feature', value: 'enabled', description: 'VDPAU with OpenGL/X11')
+option('vapoursynth', type: 'feature', value: 'enabled', description: 'VapourSynth filter bridge')
+option('openal', type: 'feature', value: 'enabled', description: 'OpenAL audio output')
+option('lua',
+    type: 'combo',
+    choices: ['lua', 'lua52', 'lua5.2', 'lua-5.2', 'luajit', 'lua51',
+              'lua5.1', 'lua-5.1', 'auto', 'enabled', 'disabled'],
+    value: 'enabled',
+    description: 'Lua'
+)
+
+meson setup builddir
+cd builddir
+meson compile
+
+PYTHONPATH=$PYTHONPATH:/home/amadeok/vs-mlrt/scripts
+EXPORT $PYTHONPATH
+
+ ~/mpv-vap/mpv/builddir/mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4"  --vf=vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]:4:8 --input-ipc-server=/tmp/mpvsocketr2
+ ~/mpv-vap/mpv/builddir/mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]:4:8' --input-ipc-server=/tmp/mpvsocketr2
+
+ ~/mpv-vap/mpv/builddir/mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8 --ovc=libx264 --ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16 --oac=aac --of=ssegment --ofopts=segment_time=4,segment_format=mpegts,segment_list_size=25,segment_start_number=0,segment_list_flags=+live,segment_list=[out.m3u8] --input-ipc-server=/tmp/mpvsocketr2 --o=str%04d.ts 
  
+  ~/mpv-vap/mpv/builddir/mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8 --ovc=libx264 --ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16 --oac=aac --of=ssegment --ofopts=segment_time=4,segment_format=mpegts,segment_list_size=25,segment_start_number=0,segment_list_flags=+live,segment_list=[out.m3u8] --input-ipc-server=/tmp/mpvsocketr2 --o=str%04d.ts 
  
+ ~/mpv-vap/mpv/builddir/mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --input-ipc-server=/tmp/mpvsocketr2 --o=str%04d.ts  --vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8 --ovc=libx264 --ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16 --oac=aac --of=ssegment --ofopts=segment_time=10,segment_list_size=0,segment_start_number=0,segment_list=[out.m3u8] 
+   
+ ---------------------------------------------
+ 
+  echo '{ "command": ["get_property", "playback-time"] }' | socat - /tmp/mpvsocketr2
+ 
+  echo '{ "command": ["set_property", "time-pos", "200"] }' | socat - /tmp/mpvsocketr2                                                                       
+
+  echo '{ "command": ["seek", "2", "exact"] }' | socat - /tmp/mpvsocketr2
+  echo '{ "command": ["seek", "-60", "relative", "exact"] }' | socat - /tmp/mpvsocketr2
+  echo '{ "command": ["seek", "1000", "absolute", "exact"] }' | socat - /tmp/mpvsocketr2
+  echo '{ "command": ["show-text", "Hello, MPV!"] }' | socat - /tmp/mpvsocketr2
+  
+  echo '{ "command": ["set_property", "speed", "0.5"]}' |  socat - /tmp/mpvsocketr2
+	
+  echo '{ "command": ["get_property", "pause"]}'    | socat - /tmp/mpvsocketr2
+  echo '{ "command": ["get_property", "playlist-pos-1"]}'    | socat - /tmp/mpvsocketr2
+
+    echo '{"command": ["is-paused"]}' |  socat - /tmp/mpvsocketr2
+
+
+  echo '{ "command": ["cycle", "pause"] }' | socat - /tmp/mpvsocketr2
+  echo '{"command":  ["quit"          ] }'             | socat - /tmp/mpvsocketr2
+
+    echo '{ "command": ["cycle", "sub"] }' | socat - /tmp/mpvsocketr2
+	echo '{ "command": ["get_property", "sub-text"] }' | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "sub-track"]}' | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "audio-params"]}' | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "media-title"]}' | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "track-list"]}' | socat - /tmp/mpvsocketr2
+echo {"command": ["set_property", "sid", 3]} | socat - /tmp/mpvsocketr2
+echo {"command": ["get_property", "sid"]} | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "sid"]}' | socat - /tmp/mpvsocketr2
+
+echo '{"command": ["get_property", "track-list/2/title"]}' | socat - /tmp/mpvsocketr2
+
+echo '{"command": ["get_property", "track-list/2/id"]}' | socat - /tmp/mpvsocketr2
+echo '{"command": ["get_property", "track-list/2/src-id"]}' | socat - /tmp/mpvsocketr2
+
+echo '{"command": ["get_property", "current-tracks/sub"]}' | socat - /tmp/mpvsocketr2
+
+mpv "/home/amadeok/Downloads/Demon Slayer/1.mkv" --vf='crop=iw:548,lavfi=[scale=iw/2:ih/2]'  --input-ipc-server=/tmp/mpvsocketr2
+  -------------------------------------
+  
+  npx create-react-app hls-server
+
+
+grep -rn "localhost" .
+
+
+
+---------------------------------
+
+https://docs.nvidia.com/video-technologies/video-codec-sdk/11.1/ffmpeg-with-nvidia-gpu/index.html
+gtx 1060 | NVIDIA-SMI 535.113.01             Driver Version: 535.113.01   CUDA Version: 12.2     |
+
+ffmpeg version N-112512-g70864e6adb Copyright (c) 2000-2023 the FFmpeg developers
+  built with gcc 10 (Ubuntu 10.5.0-1ubuntu1~20.04)
+  configuration: --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared
+  libavutil      58. 27.100 / 58. 27.100
+  libavcodec     60. 30.102 / 60. 30.102
+  libavformat    60. 15.101 / 60. 15.101
+  libavdevice    60.  2.101 / 60.  2.101
+  libavfilter     9. 11.100 /  9. 11.100
+  libswscale      7.  4.100 /  7.  4.100
+  libswresample   4. 11.100 /  4. 11.100
+
+
+
+./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --extra-cflags=-I/usr/local/cuda/include --extra-ldflags=-L/usr/local/cuda/lib64 --disable-static --enable-shared --enable-libx264 --enable-gpl
+sudo ldconfig
+ldconfig -p | grep libpostproc
+
+
+git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git
+sudo apt-get install pkgconf libffmpeg-nvenc-dev
+
+
+./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --disable-static --enable-shared --enable-nvenc --enable-cuda --enable-cuvid --extra-cflags=-I/usr/local/cuda-11.8/include --extra-ldflags=-L/usr/local/cuda-11.8/lib64
+
+PKG_CONFIG_PATH="/home/amadeok/mpv-build/ffmpeg-5.0.3/nv-codec-headers" ./configure --enable-nonfree --enable-cuda-nvcc --enable-libnpp --disable-static --enable-shared --enable-nvenc --enable-cuda --enable-cuvid --extra-cflags=-I/usr/local/cuda-11.8/include --extra-ldflags=-L/usr/local/cuda-11.8/lib64
+
+
+
+mpv "/home/amadeok/Downloads/Demon Slayer/Demon Slayer - 10 - Together Forever [KaiDubs] [720p].mp4" --vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8 --ovc=h264_nvenc --ovcopts-add=preset=p1  --oac=aac --of=ssegment --ofopts=segment_time=1,segment_format=mpegts,segment_list_size=25,segment_start_number=0,segment_list_flags=+live,segment_list=[/home/amadeok/express-hls-example/src/stream/out.m3u8] --input-ipc-server=/tmp/mpvsocketr2 --o=/home/amadeok/express-hls-example/src/stream//str%06d.ts
+
+mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --ovc=h264_nvenc --ovcopts-add=preset=p1  -o output_file.mp4 works
+
+mpv --no-config "/home/amadeok/Downloads/Demon Slayer/01.mp4" -ovc h264_nvenc -ovcopts-add preset=p3 -o outputfile.mp4
+pause
+./ffmpeg -y -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:a copy -c:v h264_nvenc  output.mp4
+
+./ffmpeg -y -vsync 0 -hwaccel cuda -hwaccel_output_format cuda -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:a copy -c:v h264_nvenc  output.mp4
+./ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264_nvenc output.mp4
+ ./ffmpeg  -hwaccel cuda -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -vcodec h264_nvenc -gpu 0 -acodec copy -f mpegts output_video.mpg
+./ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264_nvenc -profile high444p -pixel_format yuv444p -preset default output.mp4
+./ffmpeg -hwaccel_device 0 -hwaccel cuda     -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -vf "hwupload_cuda,scale_cuda=1280:720" -c:v h264_nvenc -preset slow -c:a copy  out.mp4
+./ffmpeg -hwaccel_device 0 -hwaccel cuda -hwaccel_output_format cuda -i "/home/amadeok/Downloads/Demon Slayer/01.mp4"  -vf scale_cuda=w=1280:h=720 -c:v h264_nvenc -preset slow output.mkv
+./ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264 -vf 'format=nv12,hwupload' -c:a aac -strict experimental -b:a 192k -f mp4 -y output.mp4
+ffmpeg  -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:v h264_amf output.mp4
+
+mpv "/home/amadeok/Downloads/Demon Slayer/Demon Slayer - 10 - Together Forever [KaiDubs] [720p].mp4" -o outputfile.mp4 --hwdec=nvdec --ovc=h264_nvenc --ovcopts-add=preset=p1
+
+-----------------------
+ps -o pid,ni,cmd -p 521166
+LD_LIBRARY_PATH=/usr/lib64-nvidia:/usr/local/lib sudo nice -n -20 mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4"
+------------------------------
+
+ffmpeg -y -vsync 0 -hwaccel cuda -hwaccel_output_format cuda -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:a copy -c:v h264_nvenc  output.mp4
+
+  ffmpeg  -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:a copy -c:v h264_nvenc  output.mp4
+  
+    ffmpeg  -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -c:a copy output.mp4
+
+ ffmpeg -hwaccel nvdec -i input_video.mp4 -f yuv4mpegpipe - | vapoursynth - --y4m script.vpy - | ffmpeg -f yuv4mpegpipe -i - -c:v h264_nvenc -pix_fmt yuv420p output_video.mp4
+ 
+  ffmpeg -hwaccel nvdec -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -f yuv4mpegpipe - | ffmpeg -f yuv4mpegpipe -i - -c:v h264_nvenc -pix_fmt yuv420p output_video.mp4
+  
+  ffmpeg -hwaccel nvdec -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -f rawvideo -pix_fmt nv12 - | \
+ffmpeg -f rawvideo -pix_fmt nv12 -s:v 1280x720 -i pipe:0 -c:v h264_nvenc output.mp4 -y
+  
+  
+  ffmpeg -hwaccel cuvid -c:v h264_cuvid -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -pix_fmt yuv420p -f yuv4mpegpipe - | vapoursynth - --y4m script.py
+
+  ffmpeg -hwaccel cuvid -c:v h264_cuvid -i "/home/amadeok/Downloads/Demon Slayer/01.mp4"  -f rawvideo -pix_fmt nv12- | vspipe - --y4m script.py
+
+--------------------------------
+ffmpeg -f rawvideo -pixel_format rgb24 -video_size WIDTHxHEIGHT -framerate FRAMERATE -i - -f lavfi -i anullsrc=r=44100:cl=stereo -vf format=yuv420p -c:v libx264 -preset ultrafast -b:v 5000k -c:a aac -strict experimental -f nut - | mpv -
+ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4"  -f rawvideo -pix_fmt rgb24 - | mpv -i -
+
+ffmpeg  -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -f matroska - | mpv -
+ffmpeg -hwaccel nvdec -i "/home/amadeok/Downloads/Demon Slayer/01.mp4"  -f matroska - | mpv -
+---------------------------------
+
+mpv "/home/amadeok/Downloads/Demon Slayer/Demon Slayer - 10 - Together Forever [KaiDubs] [720p].mp4" --vf='lavfi=[scale=iw/2:ih/2]' 
+mpv "/home/amadeok/Downloads/Demon Slayer/Demon Slayer - 10 - Together Forever [KaiDubs] [720p].mp4" --vf='crop=iw:548,lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8 
+---------------------------
+ffmpeg -f v4l2 -framerate 25 -video_size 640x480 -i  "/home/amadeok/Downloads/Demon Slayer/01.mp4" -vcodec libx264 -profile:v main -g 25 -r 25 -b:v 500k -keyint_min 250 -strict experimental -pix_fmt yuv420p -movflags empty_moov+default_base_moof -an -preset ultrafast -f mp4 tcp://localhost:9090
+
+ffmpeg   -i  "/home/amadeok/Downloads/Demon Slayer/01.mp4" -vcodec libx264 -profile:v main -g 25 -r 25 -b:v 500k -keyint_min 250 -strict experimental -pix_fmt yuv420p -movflags empty_moov+default_base_moof -an -preset ultrafast -f mp4 tcp://localhost:9090
+
+mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --of=help -o -
+
+mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" -o - 
+mpv --o=/tmp/mpvfifo --of=nut --ovc=rawvideo --oac=pcm_s16le  "/home/amadeok/Downloads/Demon Slayer/01.mp4"
+
+mpv "/home/amadeok/Downloads/Demon Slayer/01.mp4" --of=matroska -o /tmp/mpvfifo2
+
+mpv "/home/amadeok/Downloads/Demon Slayer/01.mkv" --of=mpegts -o /tmp/mpvfifo2
+c
+mpv "/home/amadeok/Downloads/Demon Slayer/1.mkv" --of=rawvideo -o /tmp/mpvfifo2
+
+mpv --demuxer=rawvideo --demuxer-rawvideo-w=1920 --demuxer-rawvideo-h=1080 --demuxer-rawvideo-mp-format=yuv420p10 /tmp/mpvfifo2
+
+
+mpv "/home/amadeok/Downloads/Demon Slayer/1.mkv" --ovc=hevc_nvenc --ovcopts-add=preset=p1 --of=mpegts -o /tmp/mpvfifo2
+
+mpv http://192.168.1.160:3000/video
+mpv --demuxer=rawvideo --demuxer-rawvideo-w=1920 --demuxer-rawvideo-h=1080 --demuxer-rawvideo-mp-format=yuv420p10 http://192.168.1.160:3000/video 
+
+stat -c %s /tmp/mpvfifo2
+
+exec 3<>/tmp/mpvfifo2
+fcntl 3 F_SETPIPE_SZ 1048576
+exec 3>&-
+stat -c %s /tmp/mpvfifo2
+
+
+yes produce_this_string_as_output | tee /tmp/mpvfifo2 | wc -c &
+exec 3<&- 3</tmp/mpvfifo2
+sleep 1
+exec 3<&-
+
+
+
