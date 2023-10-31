@@ -22,7 +22,7 @@ import tempfile
 import time
 import typing
 import zlib
-
+print(sys.path)
 import vapoursynth as vs
 from vapoursynth import core
 trtpath = ""
@@ -60,7 +60,8 @@ def get_plugins_path() -> str:
     return os.path.dirname(path).decode()
 
 plugins_path: str = get_plugins_path()
-trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec") if sys.platform.startswith('win') else  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
+trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec.exe") if sys.platform.startswith('win') else  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
+assert (os.path.isfile(trtexec_path))
 models_path: str = os.path.join(plugins_path, "models")
 inColab = False
 if os.path.isdir("/content/drive/MyDrive/rifef/models"):
@@ -1305,14 +1306,18 @@ def trtexec(
 
     def runit(useSubp, check):
         if useSubp:
-            assert(0)
+            print("using subprocess, ")
+            #args[0] = r"E:\Users\amade\rifef\VSTRT\vsmlrt-cuda\trtexec.exe";
+            ret = " ".join(args)
+            print(ret)
             return subprocess.run(args, env=env, check=check, stdout=sys.stderr)
         else:
             cmd = " ".join(args)
             print("using os.system, ", cmd)
             return os.system(cmd)
 
-    useSubp_ =  sys.platform.startswith('linux');
+    useSubp_ =  not sys.platform.startswith('linu') and 0
+    print("USE SUBPROCESS: ", useSubp_)
     if log:
         env_key = "TRTEXEC_LOG_FILE"
         prev_env_value = os.environ.get(env_key)

@@ -7,8 +7,14 @@ core = vs.core
 import vapoursynth as vs
 core = vs.core
 video_file_path = "/home/amadeok/Downloads/Demon Slayer (Kimetsu no Yaiba) [KaiDubs] [AS] [CC] [720p]/Demon Slayer - 01 - Cruelty [KaiDubs] [720p].mp4"
+video_file_path= r"C:\Users\amade\Videos\002_sky pm 12 30.mkv"
 try:
-  core.std.LoadPlugin(path="/usr/lib/x86_64-linux-gnu/libffms2.so")
+   p =  r"e:\Users\amade\rifef\ffms2-2.40-msvc\x64\ffms2.dll"
+   if os.path.isfile(p):
+      core.std.LoadPlugin(path=p)
+   else:
+      p =  "/usr/lib/x86_64-linux-gnu/libffms2.so"
+      core.std.LoadPlugin(path=p)
 except Exception as e:
   print(e)
 print("\n----\n ", dir(core), "\n----------\n", dir(core.ffms2), "\n------------------")

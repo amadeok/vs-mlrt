@@ -36,25 +36,35 @@ except:
 new_width = (video_in_dw // 32) * 32
 new_height = (video_in_dh // 32) * 32
 
-left = (video_in_dw - new_width) / 2
+left = (video_in_dw - new_width)
 right = left
-top = (video_in_dh - new_height) / 2
+top = (video_in_dh - new_height)
 bottom = top
-print( left, right, top, bottom)
-clip = vs.core.std.CropRel(clip, left, right, top, bottom)
+print( left, right, top, bottom," before cropRel")
+#clip = vs.core.std.CropRel(clip, left, right, top, bottom) #this fails sometimes
+clip = vs.core.std.CropAbs(clip, left=0, top=0, width=new_width, height=new_height)
+
+print("test3 before bicubic")
 clip = clip.resize.Bicubic(format=vs.RGBH,matrix_in_s="709") #RGBH for 16 bit per sample output
 #print("-----> clip bps2 ", clip[0].format.bits_per_sample )
+print("test3 before backend")
+trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None)
+#trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None,static_shape=False,min_shapes=[64,64],max_shapes=[2560,1440])
+print("test3 before rife")
 
-trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None,static_shape=False,min_shapes=[64,64],max_shapes=[2560,1440])
-clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=2)
+clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=4)
 #print("output")
 
-clip = core.resize.Bicubic(clip, width=getW(), height=getH(), format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0)
-  
+print("test3 after rife")
+
+clip = core.resize.Bicubic(clip,  format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
+
+clip = vs.core.std.AddBorders(clip,  right=left, bottom=top )  
 # fps_fraction = fractions.Fraction(container_fps * interpMulti).limit_denominator()
 # output_num, output_den = fps_fraction.numerator, fps_fraction.denominator
 #clip = core.std.AssumeFPS(clip, fpsnum=output_num, fpsden=output_den) GIVES WRONG FPS ON COLAB
 
 # output to mpv
+print("set_output")
 
 clip.set_output()
