@@ -182,6 +182,21 @@ function startHls() {
             //  var currentFrag = hls.levels[hls.currentLevel].details.fragments[data.frag.cc];
             currentSegmentStartTime = data.frag.start;
         });
+
+        hls.on(Hls.Events.ERROR, function(event, data) {
+            if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+                data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
+                data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {
+                if (data.response && data.response.code === 404) {
+                    // Handle 404 error here
+                    console.log('Error: 404 Not Found callback');
+                } else {
+                    // Handle other HLS errors
+                    console.log('Error: ' + data.details);
+                }
+            }
+        });
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             videoElement.play();
         });
@@ -387,20 +402,22 @@ function togglePlayPause() {
 
 async function makeRequest() {
     try {
-        // console.log("mreq ", bSeeking)
+         //console.log("mreq ", bSeeking, hls.levels[hls.currentLevel] , hls.levels[hls.currentLevel].details)
         if (!bSeeking) {
-            let frags = hls.levels[hls.currentLevel].details.fragments;
-            let last = frags[frags.length - 1];
-            let d = last.start - currentSegmentStartTime;
-            const response = await fetch('/mpv-get-perc-pos', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ clientPlaybackD: d }),
-            });
-            const data = await response.json();
-            document.getElementById('seek-slider').value = data.number;
+            if (hls.levels[hls.currentLevel] && hls.levels[hls.currentLevel].details) {
+                let frags = hls.levels[hls.currentLevel].details.fragments;
+                let last = frags[frags.length - 1];
+                let d = last.start - currentSegmentStartTime;
+                const response = await fetch('/mpv-get-perc-pos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ clientPlaybackD: d }),
+                });
+                const data = await response.json();
+                document.getElementById('seek-slider').value = data.number;
+            }
         }
         else console.log("seeking, get perc pos aborted")
     } catch (error) {

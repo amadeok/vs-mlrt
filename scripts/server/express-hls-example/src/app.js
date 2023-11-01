@@ -29,22 +29,39 @@ let inColab = false;
 googleDrivePath = '/content/drive/MyDrive';
 if (fs.existsSync(googleDrivePath))
     inColab = true
+
 const configFile = inColab ? googleDrivePath + '/rifef/configColab.ini' : __dirname + "/config.ini";
-const fileContent = fs.readFileSync(configFile, 'utf8');
-config = ini.parse(fileContent);
-config.main.segmentBufferN = parseInt(config.main.segmentBufferN);
-config.main.useNvenc = parseInt(config.main.useNvenc);
-config.main.maxWidth = parseInt(config.main.maxWidth);
-config.debug.useChildSpawn = parseInt(config.debug.useChildSpawn)
-config.main.pausePlayTimeMult = parseInt(config.main.pausePlayTimeMult)
-config.main.segmentTime = parseInt(config.main.segmentTime);
+
+function readINI() {
+    const fileContent = fs.readFileSync(configFile, 'utf8');
+    let config = ini.parse(fileContent);
+
+    function convertToInt(obj) {
+        for (const key in obj) {
+            if (obj.hasOwnProperty(key)) {
+                const value = obj[key];
+                if (!isNaN(value)) {
+                    obj[key] = parseInt(value);
+                }
+                if (typeof value === 'object' && value !== null) {
+                    convertToInt(value);
+                }
+            }
+        }
+    }
+    config = JSON.parse(JSON.stringify(config));
+    convertToInt(config);
+    return config;
+}
+
+let config = readINI();
 
 let usetimerPauser = false;
 
 const socketPath = '/tmp/mpvsocketr2';
 const streamPath = __dirname + "/stream/";
-let inputFile = "/home/amadeok/Downloads/Demon Slayer/01.mp4";
-inputFile = "/home/amadeok/Downloads/bnha92.mkv"
+let inputFile = "/mnt/SAB/filmhuari/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG[TGx]/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG.mkv"
+//inputFile = "/home/amadeok/Downloads/bnha92.mkv"
 const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 
@@ -52,13 +69,16 @@ let streamArgs = [
     "--oac=aac", "--of=ssegment", `--ofopts=segment_time=${config.main.segmentTime},segment_format=mpegts,segment_list_size=25,`
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
     "--o=" + streamPath + "/str%06d.ts",];
+
 let otherArgs = ["--input-ipc-server=/tmp/mpvsocketr2", "-idle",
-    "--really-quiet"
+    config.debug.quiet ? "--really-quiet" : "",
+    //"--script-opts=test3.py:multiplier=3"
+
 ]
 
 let player = null;
 let latestSSegment = null;
-let latestCSegment = null;
+let latestCSegment = 0;
 let latestSSegmentInt = null;
 let timerPauseTimeout = null;
 let clientPos = null;
@@ -98,55 +118,193 @@ function setMPVnice() {
     });
 }
 
-function getArgs(stream, file) {
+function roundToMultipleOf32(number, dir) {
+    if (!(dir == "up" || dir == "down"))
+        throw new Error("dir undefined");
 
-    let binary = inColab || 1 ? "LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' " : " ";
-    binary += inColab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
+    return dir == "up" ? Math.ceil(number / 32) * 32 : Math.floor(number / 32) * 32;
+}
+function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
+function rNarestMult32(number) { return Math.round(number / 32) * 32; }
+function check32(num1, num2) {
+    if (num1 % 32 !== 0 || num2 % 32 !== 0)
+        throw new Error('One of the numbers is not a multiple of 32.');
+}
+function getArgs(stream, file, incolab) {
+
+
+    let binary = incolab || 1 ? `RIFEF_CONFIG_FILE='${configFile}' LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' ` : " ";
+    binary += incolab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
+    incolab = true;
+    inColab_ = incolab;
 
     aspectr = config.main.aspectRatio;
 
-    cropVF = "";
+    crop1VF = "", crop2VF = "", padVF = "";
     const parts = aspectr.split(':');
     const awidth = parseInt(parts[0]);
     const aheight = parseInt(parts[1]);
-    let newW = rNearestMultfTwo(stream.width), newH = rNearestMultfTwo(stream.height);
-    let cropRes = "";
+    ///let newW = stream.width, newH = stream.height;
+    let cropRes = "", scaleRes = "", padRes = "", cropRes2 = "", cropScaleVF = "";
     let f = awidth / aheight, f2 = stream.width / stream.height;
+    let dif = Math.abs(f - f2);
 
-    if (f > f2) {
-        let dif = Math.abs(f - f2);
+    let needsRatioCrop = f > f2 && dif > 0.03;
 
-        if (dif > 0.03) {
-            newH = rNearestMultfTwo(stream.width / f);
-            cropRes = `${newW}:${parseInt(newH)}`
-            cropVF = `crop=${cropRes},`
-            console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
+    if (!needsRatioCrop)
+        console.log("[WARNING] User aspectRatio (" + aspectr + ") ignored because it has to be more panoramic than input aspect ratio e.g: 21:9 for an 16:9 input",)
+
+    let needsDownscaling = stream.width > config.main.maxWidth
+    let crop1W, crop1H, scaleW, scaleH, crop2W, crop2H, padW, padH;
+    let iw = stream.width, ih = stream.height;
+    let srcRes = `${stream.width}:${stream.height}`;
+    console.log("needsRatioCrop ", needsRatioCrop, " needsDownscaling: ", needsDownscaling, " inColab_ ", inColab_);
+    if (needsRatioCrop && needsDownscaling) {
+
+        scaleW = roundToMultipleOf32(config.main.maxWidth, "up");
+        scaleH = (config.main.maxWidth / iw) * ih;
+
+        crop1W = scaleW;
+        crop1H = roundToMultipleOf32(scaleW / f, "up");
+
+        let dd2 = Math.abs(crop1W / crop1H - f);
+        console.log("dd2 ", dd2);
+        if (dd2 > 0.2) throw new Error(`dd > 0.03: ${dd2}`);
+        // scaleW = roundToMultipleOf32(scaleW_, inColab_ ? "down" : "up");
+        // scaleH = roundToMultipleOf32(scaleH_, inColab_ ? "down" : "up");
+        crop1W = Math.round(crop1W);
+        crop1H = Math.round(crop1H);
+        scaleH = Math.round(scaleH);
+        scaleW = Math.round(scaleW);
+        cropRes = `${crop1W}:${crop1H}`
+        //let scaleRes_ = `${scaleW_}:${Math.round(scaleH_)}`
+        scaleRes = `${scaleW}:${scaleH}`
+
+        resizeVF = `lavfi=[scale=${scaleRes}],`;
+        cropVF = `crop=${cropRes},`;
+
+        cropScaleVF += resizeVF;
+        cropScaleVF += cropVF;
+
+        console.log(`Automatic downscaling    :  ${srcRes}  ->   ${scaleRes} -> ${cropRes} -> RIFE `)
+        console.log(`Automatic cropping (${aspectr}):  ${srcRes}  ->   ${cropRes}  -> RIFE`)
+        check32(crop1W, crop1H);
+    }
+    else if (needsRatioCrop) {
+
+        crop1W = roundToMultipleOf32(iw, "down");
+        crop1H = roundToMultipleOf32(iw / f, "up");
+        cropRes = `${crop1W}:${crop1H}`
+        cropVF = `crop=${cropRes},`;
+        cropScaleVF += cropVF;
+
+        console.log(`Automatic cropping (${aspectr}):  ${srcRes} -> ${cropRes} -> RIFE`)
+        check32(crop1W, crop1H);
+    }
+    else if (needsDownscaling) {
+        if (inColab_) {
+            scaleW = rNarestMult32(config.main.maxWidth);
+            scaleH = rNarestMult32((config.main.maxWidth / iw) * ih);
+            scaleRes = `${scaleW}:${scaleH}`
+            resizeVF = `lavfi=[scale=${scaleRes}],`;
+            cropScaleVF += resizeVF;
+            console.log(`Automatic downscaling: ${srcRes}  ->   ${scaleRes}  `)
+            check32(scaleW, scaleH);
+        } else {
+            scaleW = Math.round(config.main.maxWidth);
+            scaleH = Math.round((config.main.maxWidth / iw) * ih);
+
+            scaleRes = `${scaleW}:${scaleH}`
+            resizeVF = `lavfi=[scale=${scaleRes}],`;
+
+            padW = roundToMultipleOf32(scaleW, "up");
+            padH = roundToMultipleOf32(scaleH, "up");
+            padRes = `${padW}:${padH}`;
+            padVF = `pad=${padRes}:0:0:black,`
+
+            crop2W = scaleW; crop2H = scaleH;
+            cropRes2 = `${crop2W}:${crop2H}`;
+            crop2VF = `,crop=${cropRes2}`;
+
+            cropScaleVF += resizeVF;
+            cropScaleVF += padVF;
+            // cropScaleVF += crop2VF;
+            console.log(`Automatic downscaling: ${srcRes} -> ${scaleRes} -> ${padRes} -> RIFE -> ${cropRes2}  `)
+            check32(padW, padH);
         }
+
     }
     else {
-        console.log("[WARNING] User aspectRatio (" + aspectr + ") ignored because it has to be more panoramic than input aspect ratio e.g: 21:9 for an 16:9 input",)
-    }
-    function rNearestMultfTwo(number) { return Math.round(number / 2) * 2; }
+        if (inColab_) {
+            crop1W = roundToMultipleOf32(iw, "down");
+            crop1H = roundToMultipleOf32(ih, "down");
+            cropRes = `${crop1W}:${crop1H}`;
+            crop1VF = `crop=${cropRes},`;
+            cropScaleVF += crop1VF;
+            console.log(`Automatic cropping for RIFE: ${srcRes}  ->   ${cropRes} -> RIFE  `)
+            check32(crop1W, crop1H);
+        }
+        else {
+            padW = roundToMultipleOf32(iw, "up");
+            padH = roundToMultipleOf32(ih, "up");
+            padRes = `${padW}:${padH}`;
+            padVF = `pad=${padRes}:0:0:black,`
 
-    videow = stream.width;
-    if (videow > config.main.maxWidth && 1) {
-        var varr = (config.main.maxWidth / videow) * newH;
-        newW = rNearestMultfTwo(config.main.maxWidth), newH = rNearestMultfTwo(varr);
-        resizeVF = `lavfi=[scale=${newW}:${newH}],`
-        console.log(`Automatic downscaling:     ${cropRes} -> ${newW}:${newH}`)
-    }
+            crop2W = iw; crop2H = ih;
+            cropRes2 = `${crop2W}:${crop2H}`;
+            crop2VF = `,crop=${cropRes2}`;
 
-    let vfarg = "--vf='" + cropVF + resizeVF + "vapoursynth:[" + (inColab ? "/content/mlrt/" : "/home/amadeok/")
-        + "vs-mlrt/scripts/test3.py]':4:8";
+            cropScaleVF += padVF;
+            // cropScaleVF += crop2VF;
+            console.log(`Automatic downscaling: ${srcRes}  ->   ${padRes} -> RIFE -> ${cropRes2}  `)
+            check32(padW, padH);
+        }
+    }
+    //console.log("cropScaleVF ", cropScaleVF);
+
+
+    let scriptPath1 = "/content/mlrt/vs-mlrt/scripts/test3.py"
+    let scriptPath2 = "/home/amadeok/vs-mlrt/scripts/test3.py"
+    const [numerator, denominator] = stream.r_frame_rate.split('/').map(Number);
+    let result;
+    if (!isNaN(numerator) && !isNaN(denominator)) {
+        result = numerator * config.main.conf; // Replace OUTPUT_MULTIPLE with your desired multiple
+        console.log("Output frame rate:", result);
+      } else {
+        console.log("Invalid input frame rate format.");
+      }
+
+    let vfarg = "--vf='" + cropScaleVF + "vapoursynth:[" + (fs.existsSync(scriptPath1) ? scriptPath1 : scriptPath2) + "]" + crop2VF +`,fps=${result}` + "'"; //:4:8
     // vfarg = "";
-
+    console.log("vfarg ", vfarg);
     enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
-
-
-
 
     return { enc_args: enc_args, vfarg: vfarg, binary: binary };
 }
+
+
+// while (1) {
+//     let width = Math.floor(Math.random() * (3001 - 400) + 400); // Random width between 400 and 3000
+//     let height = Math.floor(Math.random() * (3001 - 400) + 400); // Random height between 400 and 3000
+
+//     let newObject = {
+//         width: width,
+//         height: height
+//     };
+
+//     let newObject2 = {
+//         width: height,
+//         height: width
+//     }
+//     if (height > width)
+//         newObject = newObject2;
+//     console.log("\n", newObject)
+//    //  newObject.width = 1055;
+//    // newObject.height = 505;
+//     getArgs(newObject, "", 0);
+//     getArgs(newObject, "", 1);
+
+// }
 
 
 function startMpv(file) {
@@ -169,7 +327,7 @@ function startMpv(file) {
                 if (str.codec_type == "video")
                     stream = str;
 
-            let args = getArgs(stream, file);
+            let args = getArgs(stream, file, inColab);
             let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
             console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
@@ -215,7 +373,11 @@ function startMpv(file) {
                 });
             }
             // if (!usetimerPauser)
-            //     latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+            checkFile(streamPath + "out.m3u8", () => {
+                console.log(`File ${streamPath + "out.m3u8"} exists, starting segment check`);
+                latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+                //res.json({ message: 'File exists, opening...' });
+            });
 
             setTimeout(() => {
                 const pl = new mpv.MPVClient(socketPath);
@@ -232,54 +394,76 @@ function startMpv(file) {
 
 
 function getLatestHLSSegment(folderPath) {
-    const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.ts')); // Assuming HLS segments have a .ts extension
 
-    if (files.length === 0) {
-        return null; // No HLS segments found in the folder
-    }
+    fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
+        if (err) {
+            console.error('Error reading file:', err);
+            return;
+        }
+        const lines = data.split('\n');
+        const lastLine = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
 
-    const latestSSegment = files.reduce((prev, current) => {
-        const prevTimestamp = fs.statSync(path.join(folderPath, prev)).mtimeMs;
-        const currentTimestamp = fs.statSync(path.join(folderPath, current)).mtimeMs;
-        return prevTimestamp > currentTimestamp ? prev : current;
+    });
+    // const files = fs.readdirSync(folderPath).filter(file => file.endsWith('.ts')); // Assuming HLS segments have a .ts extension
+    // if (files.length === 0) {
+    //     return null; // No HLS segments found in the folder
+    // }
+    // const latestSSegment = files.reduce((prev, current) => {
+    //     const prevTimestamp = fs.statSync(path.join(folderPath, prev)).mtimeMs;
+    //     const currentTimestamp = fs.statSync(path.join(folderPath, current)).mtimeMs;
+    //     return prevTimestamp > currentTimestamp ? prev : current;
+    // });
+    // return latestSSegment;
+}
+
+function getLatestHLSSegmentF() {
+    //let latestsegment = getLatestHLSSement(streamPath);
+    //  console.log("getlatest")
+    fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
+        if (err) {
+            console.error('Error reading file:', err);
+            return;
+        }
+        const lines = data.split('\n');
+        const latestsegment = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
+
+        const regex = /(\d+)/;
+        if (latestsegment) {
+            let partial = latestsegment.match(regex);
+            if (!partial)
+                return; 
+            const number = partial[0];
+            latestSSegment = parseInt(number, 10);
+            let d = latestSSegment - latestCSegment;
+            console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
+            if (d > config.main.segmentBufferN) {
+                player.getProperty("pause")
+                    .then((res) => {
+                        if (!res) {
+                            console.log("---> pausing delta <--- \n")
+                            player.pause();
+                        }
+                    }).catch((e) => { console.log(e) });
+            }
+            else {
+                player.getProperty("pause")
+                    .then((res) => {
+                        if (res) {
+                            console.log("---> resuming delta <--- \n")
+                            player.resume();
+                        }
+                    }).catch((e) => { console.log(e) });
+            }
+        }
     });
 
-    return latestSSegment;
 }
-function getLatestHLSSegmentF() {
-    let latestsegment = getLatestHLSSegment(streamPath);
-    //  console.log("getlatest")
-    const regex = /(\d+)/;
-    if (latestsegment) {
-        const number = latestsegment.match(regex)[0];
-        latestSSegment = parseInt(number, 10);
-        let d = latestSSegment - latestCSegment;
-        console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
-        if (d > config.main.segmentBufferN) {
-            player.getProperty("pause")
-                .then((res) => {
-                    if (!res) {
-                        console.log("---> pausing delta <--- \n")
-                        player.pause();
-                    }
-                }).catch((e) => { console.log(e) });
-        }
-        else {
-            player.getProperty("pause")
-                .then((res) => {
-                    if (res) {
-                        console.log("---> resuming delta <--- \n")
-                        player.resume();
-                    }
-                }).catch((e) => { console.log(e) });
-        }
-    }
-}
+
 function startMpvEv(file) {
     startMpv(file);
 }
 
-//startMpvEv(inputFile);
+startMpvEv(inputFile);
 
 // mpvProcess.stdout.on('data', (data) => {  console.log(`stdout: ${data}`);  });
 // mpvProcess.stderr.on('data', (data) => {   console.error(`stderr: ${data}`); });
@@ -506,6 +690,7 @@ app.get('/video2', (req, res) => {
 
 app.get('/mpv-play-file', (req, res) => {
 
+    config = readINI();
     const file = req.query.file || ''; // Get subfolder path from query parameter
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
 
@@ -612,28 +797,28 @@ app.post('/mpv-get-perc-pos', (req, res) => {
         .then((duration) => {
             player.getProperty('playback-time').then(pos => {
                 let sliderPos = (pos / duration) * 1000;
-                let delta = clientPlaybackD;
-                console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-
+                //let delta = clientPlaybackD;
+                //console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
                 //if (clientPos)
-                    if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
-                        player.getProperty("pause")
-                            .then((res) => {
-                                if (!res) {
-                                    console.log("---> pausing delta <--- \n")
-                                    player.pause();
-                                }
-                            }).catch((e) => { console.log(e) });
-                    }
-                    else {
-                        player.getProperty("pause")
-                            .then((res) => {
-                                if (res) {
-                                    console.log("---> resuming delta <--- \n")
-                                    player.resume();
-                                }
-                            }).catch((e) => { console.log(e) });
-                    }
+                // if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
+                //     player.getProperty("pause")
+                //         .then((res) => {
+                //             if (!res) {
+                //                 console.log("---> pausing delta <--- \n")
+                //                 player.pause();
+                //             }
+                //         }).catch((e) => { console.log(e) });
+                // }
+                // else {
+                //     player.getProperty("pause")
+                //         .then((res) => {
+                //             if (res) {
+                //                 console.log("---> resuming delta <--- \n")
+                //                 player.resume();
+                //             }
+                //         }).catch((e) => { console.log(e) });
+                // }
 
                 res.send({ number: sliderPos });
             }).catch((error) => { console.log(error); })
@@ -710,18 +895,25 @@ new hls(server, {
             if (ext !== 'm3u8' && ext !== 'ts') {
                 return cb(null, true);
             }
-            if (!ext == 'ts') {
+            let last = false;
+            if (ext == 'ts') {
                 const regex = /(\d+)/;
-                const number = req.url.match(regex)[0];
-                latestCSegment = parseInt(number, 10);
+                const numberS = req.url.match(regex)[0];
+                const number = parseInt(numberS, 10);
+                console.log("numer ", number, " latestCSegment ", latestCSegment, "numberS", numberS);
+                if (number > latestCSegment) {
+                    latestCSegment = Math.min(latestSSegment, number);
+                    last = true;
+                }
             }
             //  else if (usetimerPauser && ext == 'ts') {
             //     timedPaused();
             // }
-            console.log("GET received: " + req.url)
+            console.log("GET received: " + req.url + (last ? "*" : ""))
             fs.access(__dirname + req.url, fs.constants.F_OK, function (err) {
                 if (err) {
-                    console.log('File not exist');
+                    console.log('File not exist'); //                    checkFile(`${__dirname}/${req.url}`)
+
                     return cb(null, false);
                 }
                 cb(null, true);

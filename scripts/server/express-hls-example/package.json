@@ -8,7 +8,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node ./src/app.js",
     "watch": "nodemon ./src/app.js",
-    "live": "livereload . -w 1000 -d --exclusions '\\.ts$,\\.m3u8$'",
+    "live": "livereload . -w 1000 -d --exclusions '\\.ts$,\\.m3u8$\\client.js'",
     "watch2": "run-p watch live"
   },
   "repository": {
