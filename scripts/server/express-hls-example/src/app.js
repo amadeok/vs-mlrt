@@ -109,7 +109,7 @@ function getArgs(stream, file) {
     const parts = aspectr.split(':');
     const awidth = parseInt(parts[0]);
     const aheight = parseInt(parts[1]);
-    let newW = stream.width, newH = stream.height;
+    let newW = rNearestMultfTwo(stream.width), newH = rNearestMultfTwo(stream.height);
     let cropRes = "";
     let f = awidth / aheight, f2 = stream.width / stream.height;
 
@@ -117,7 +117,7 @@ function getArgs(stream, file) {
         let dif = Math.abs(f - f2);
 
         if (dif > 0.03) {
-            newH = stream.width / f;
+            newH = rNearestMultfTwo(stream.width / f);
             cropRes = `${newW}:${parseInt(newH)}`
             cropVF = `crop=${cropRes},`
             console.log(`Automatic cropping (${aspectr}):  ${stream.width}:${stream.height} -> ${cropRes}`)
