@@ -46,6 +46,7 @@ clip = clip.resize.Bicubic(format=vs.RGBH,matrix_in_s="709") #RGBH for 16 bit pe
 #print("-----> clip bps2 ", clip[0].format.bits_per_sample )
 
 trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None,static_shape=False,min_shapes=[64,64],max_shapes=[2560,1440])
+print(trt_backend)
 clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=2)
 #print("output")
 

@@ -1305,7 +1305,6 @@ def trtexec(
 
     def runit(useSubp, check):
         if useSubp:
-            assert(0)
             return subprocess.run(args, env=env, check=check, stdout=sys.stderr)
         else:
             cmd = " ".join(args)
