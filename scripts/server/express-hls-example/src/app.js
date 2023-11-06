@@ -343,6 +343,9 @@ function startMpv(file) {
                 console.error("FFprobe error ", err);
                 reject(err);
             } else {
+                try
+                {
+
                 if (file == undefined) file = inputFile;
                 if (player != null) { player.command("quit"); console.log("\n---> quitting mpv <---\n") }
                 if (latestSSegmentInt)
@@ -416,6 +419,11 @@ function startMpv(file) {
                     player = pl;
                 }, 500);
                 resolve(metadata);
+            }
+            catch (error) {
+                console.error('Caught an error:', error.message);
+                reject(error.message);
+              }
             }
         });
     })
