@@ -742,7 +742,7 @@ function checkIfDirectoryEmpty(directoryPath) {
 
 app.get('/mpv-play-file', (req, res) => {
 
-    readINI(configFile);
+    config = readINI(configFile);
     const file = req.query.file || ''; // Get subfolder path from query parameter
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
 
