@@ -18,7 +18,7 @@ const path = require('path');
 const { start } = require("repl");
 const { assert } = require("console");
 const ini = require('ini');
-
+let debugPaused = false;
 // const liveReloadServer = livereload.createServer();
 // liveReloadServer.watch(path.join(__dirname, 'public'));
 
@@ -78,7 +78,7 @@ function mergeConfigs(defaultConfig, userConfig) {
     return mergeProperties(defaultConfig, userConfig);
 }
 
-let defaultConfig = readINI(__dirname + "/configDef.ini");1
+let defaultConfig = readINI(__dirname + "/configDef.ini"); 1
 let config = readINI(configFile);
 mergeConfigs(defaultConfig, config)
 
@@ -296,11 +296,11 @@ function getArgs(stream, file, incolab) {
     if (!isNaN(numerator) && !isNaN(denominator)) {
         result = numerator * config.main.conf; // Replace OUTPUT_MULTIPLE with your desired multiple
         console.log("Output frame rate:", result);
-      } else {
+    } else {
         console.log("Invalid input frame rate format.");
-      }
+    }
 
-    let vfarg = "--vf='" + cropScaleVF + "vapoursynth:[" + (fs.existsSync(scriptPath1) ? scriptPath1 : scriptPath2) + "]" + crop2VF +`,fps=${result}` + "'"; //:4:8
+    let vfarg = "--vf='" + cropScaleVF + "vapoursynth:[" + (fs.existsSync(scriptPath1) ? scriptPath1 : scriptPath2) + "]" + crop2VF + `,fps=${result}` + "'"; //:4:8
     // vfarg = "";
     console.log("vfarg ", vfarg);
     enc_args = config.main.useNvenc ? codec_hw_args : codec_sw_args;
@@ -336,85 +336,89 @@ function getArgs(stream, file, incolab) {
 function startMpv(file) {
     ffmpeg.setFfprobePath("ffprobe");
     resizeVF = ""
-    ffmpeg.ffprobe(file, function (err, metadata) {
-        if (err) {
-            console.error(err);
-        } else {
-            if (file == undefined) file = inputFile;
-            if (player != null) player.command("quit");
-            if (latestSSegmentInt)
-                clearInterval(latestSSegmentInt);
-            player = null;
-            exec("rm " + streamPath + "*", (error, stdout, stderr) => { });
+    return new Promise((resolve, reject) => {
 
-            //console.log(metadata);
-            let stream = null;
-            for (var str of metadata.streams)
-                if (str.codec_type == "video")
-                    stream = str;
+        ffmpeg.ffprobe(file, function (err, metadata) {
+            if (err) {
+                console.error("FFprobe error ", err);
+                reject(err);
+            } else {
+                if (file == undefined) file = inputFile;
+                if (player != null) { player.command("quit"); console.log("\n---> quitting mpv <---\n") }
+                if (latestSSegmentInt)
+                    clearInterval(latestSSegmentInt);
+                player = null;
+                let delcmd = "rm -f " + streamPath + "*";
+                execSync (delcmd);
 
-            let args = getArgs(stream, file, inColab);
-            let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
-            console.log("\n---> MPV COMAND: \n", strArgs, "\n");
+                //console.log(metadata);
+                let stream = null;
+                for (var str of metadata.streams)
+                    if (str.codec_type == "video")
+                        stream = str;
 
-            if (config.debug.useChildSpawn) {
-                file = ' "' + file + '" ';
-                let listArgs = [file, ...args.enc_args, args.vfarg, ...streamArgs, ...otherArgs];
-                console.log("\n---> MPV COMAND (arr): \n ", args.binary, listArgs, "\n");
+                let args = getArgs(stream, file, inColab);
+                let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
+                console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
-                const cp = spawn(args.binary, listArgs, {
-                    stdio: 'inherit',
-                    shell: true
+                if (config.debug.useChildSpawn) {
+                    file = ' "' + file + '" ';
+                    let listArgs = [file, ...args.enc_args, args.vfarg, ...streamArgs, ...otherArgs];
+                    console.log("\n---> MPV COMAND (arr): \n ", args.binary, listArgs, "\n");
+
+                    const cp = spawn(args.binary, listArgs, {
+                        stdio: 'inherit',
+                        shell: true
+                    });
+                    // console.log("\n\nNICENESS");
+
+                    // try {
+                    //     const stdout = execSync('ps aux | grep mpv').toString();
+                    //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
+                    //     processes.forEach(processInfo => {
+                    //         const columns = processInfo.trim().split(/\s+/);
+                    //         const pid = columns[1];
+                    //         spawnSync('renice', ['-n', "-19", '-p', pid] , { stdio: 'inherit', shell: true});
+                    //         const niceness = columns[17]; // Niceness value is usually found at index 17
+                    //         const ret = spawnSync("ps", ["-o", "pid,ni,cmd", "-p", pid], {
+                    //             stdio: 'inherit',
+                    //             shell: true
+                    //         });
+                    //         //console.log(`PID: ${pid}, Niceness: ${niceness}`);
+                    //     });
+                    // } catch (error) {
+                    //     console.error(`Error: ${error.message}`);
+                    // }
+                    //console.log("NICENESS\n\n");
+
+                    // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
+                    //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
+                    //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
+                }
+                else {
+                    exec(args.strArgs, (error, stdout, stderr) => {
+                        if (error) { console.error(`Error occurred: ${error.message}`); return; }
+                        if (stderr) { console.error(`stderr: ${stderr}`); return; }
+                        console.log(`stdout: ${stdout}`);
+                    });
+                }
+                // if (!usetimerPauser)
+                checkFile(streamPath + "out.m3u8", () => {
+                    console.log(`File ${streamPath + "out.m3u8"} exists, starting segment check`);
+                    latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+                    //res.json({ message: 'File exists, opening...' });
                 });
-                // console.log("\n\nNICENESS");
 
-                // try {
-                //     const stdout = execSync('ps aux | grep mpv').toString();
-                //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
-                //     processes.forEach(processInfo => {
-                //         const columns = processInfo.trim().split(/\s+/);
-                //         const pid = columns[1];
-                //         spawnSync('renice', ['-n', "-19", '-p', pid] , { stdio: 'inherit', shell: true});
-                //         const niceness = columns[17]; // Niceness value is usually found at index 17
-                //         const ret = spawnSync("ps", ["-o", "pid,ni,cmd", "-p", pid], {
-                //             stdio: 'inherit',
-                //             shell: true
-                //         });
-                //         //console.log(`PID: ${pid}, Niceness: ${niceness}`);
-                //     });
-                // } catch (error) {
-                //     console.error(`Error: ${error.message}`);
-                // }
-                //console.log("NICENESS\n\n");
-
-                // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
-                //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
-                //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
+                setTimeout(() => {
+                    const pl = new mpv.MPVClient(socketPath);
+                    //pl.command("cycle", "pause");
+                    //pl.command("quit");
+                    player = pl;
+                }, 500);
+                resolve(metadata);
             }
-            else {
-                exec(args.strArgs, (error, stdout, stderr) => {
-                    if (error) { console.error(`Error occurred: ${error.message}`); return; }
-                    if (stderr) { console.error(`stderr: ${stderr}`); return; }
-                    console.log(`stdout: ${stdout}`);
-                });
-            }
-            // if (!usetimerPauser)
-            checkFile(streamPath + "out.m3u8", () => {
-                console.log(`File ${streamPath + "out.m3u8"} exists, starting segment check`);
-                latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
-                //res.json({ message: 'File exists, opening...' });
-            });
-
-            setTimeout(() => {
-                const pl = new mpv.MPVClient(socketPath);
-                //pl.command("cycle", "pause");
-                //pl.command("quit");
-                player = pl;
-            }, 500);
-
-        }
-    });
-
+        });
+    })
 }
 
 
@@ -445,43 +449,44 @@ function getLatestHLSSegment(folderPath) {
 function getLatestHLSSegmentF() {
     //let latestsegment = getLatestHLSSement(streamPath);
     //  console.log("getlatest")
-    fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
-        if (err) {
-            console.error('Error reading file:', err);
-            return;
-        }
-        const lines = data.split('\n');
-        const latestsegment = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
+    if (!debugPaused)
+        fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
+            if (err) {
+                console.error('Error reading file:', err);
+                return;
+            }
+            const lines = data.split('\n');
+            const latestsegment = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
 
-        const regex = /(\d+)/;
-        if (latestsegment) {
-            let partial = latestsegment.match(regex);
-            if (!partial)
-                return; 
-            const number = partial[0];
-            latestSSegment = parseInt(number, 10);
-            let d = latestSSegment - latestCSegment;
-            console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
-            if (d > config.main.segmentBufferN) {
-                player.getProperty("pause")
-                    .then((res) => {
-                        if (!res) {
-                            console.log("---> pausing delta <--- \n")
-                            player.pause();
-                        }
-                    }).catch((e) => { console.log(e) });
+            const regex = /(\d+)/;
+            if (latestsegment) {
+                let partial = latestsegment.match(regex);
+                if (!partial)
+                    return;
+                const number = partial[0];
+                latestSSegment = parseInt(number, 10);
+                let d = latestSSegment - latestCSegment;
+                console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
+                if (d > config.main.segmentBufferN) {
+                    player.getProperty("pause")
+                        .then((res) => {
+                            if (!res) {
+                                console.log("---> pausing delta <--- \n")
+                                player.pause();
+                            }
+                        }).catch((e) => { console.log(e) });
+                }
+                else {
+                    player.getProperty("pause")
+                        .then((res) => {
+                            if (res) {
+                                console.log("---> resuming delta <--- \n")
+                                player.resume();
+                            }
+                        }).catch((e) => { console.log(e) });
+                }
             }
-            else {
-                player.getProperty("pause")
-                    .then((res) => {
-                        if (res) {
-                            console.log("---> resuming delta <--- \n")
-                            player.resume();
-                        }
-                    }).catch((e) => { console.log(e) });
-            }
-        }
-    });
+        });
 
 }
 
@@ -497,9 +502,6 @@ function startMpvEv(file) {
 
 
 //const player = new mpv.MPVClient(socketPath);
-
-
-
 //app.use(express.static(__dirname + '/public'));
 
 app.get('/', (req, res) => {
@@ -514,7 +516,7 @@ app.get('/clientjs', (req, res) => {
 
 
 app.get('/files', (req, res) => {
-
+    config = readINI(configFile);
     const subfolder = req.query.subfolder || ''; // Get subfolder path from query parameter
     const directoryPath2 = path.join(config.main.mediadir, subfolder);
 
@@ -712,7 +714,23 @@ app.get('/video2', (req, res) => {
         ffmpegProcess.kill();
     });
 });
+function checkIfDirectoryEmpty(directoryPath) {
+    return new Promise((resolve, reject) => {
+        const interval = setInterval(() => {
+            fs.readdir(directoryPath, (err, files) => {
+                if (err) {
+                    clearInterval(interval);
+                    reject(err);
+                }
 
+                if (files.length === 0) {
+                    clearInterval(interval);
+                    resolve();
+                }
+            });
+        }, 1000); // Check every 1 second (you can adjust the interval as needed)
+    });
+}
 
 app.get('/mpv-play-file', (req, res) => {
 
@@ -721,33 +739,54 @@ app.get('/mpv-play-file', (req, res) => {
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
 
     const file_path = path.join(config.main.mediadir, file);
-    console.log('Requested file:', file_path, " ; useTCP ", useTCP);
+    console.log('\n ---> Requested file:', file_path, " ; useTCP ", useTCP, " <---\n");
     if (fs.existsSync(file_path)) {
         if (!useTCP) {
-            startMpvEv(file_path);
-            setTimeout(() => {
+            let ret = startMpv(file_path);
+            ret.then(() => {
+                // console.log("\n---> startMPV then", ret, " <--- \n");
 
+                // checkIfDirectoryEmpty(streamPath)
+                //     .then(() => {
+                console.log('\n -->Stream files deleted, proceeding..  <-- \n');
                 checkFile(streamPath + "str000001.ts", () => {
                     console.log(`File ${streamPath + "str000001.ts"} exists.`);
 
                     player.getProperty('track-list').then(tr => {
-                        console.log("Got file track-list");
-                        res.json({ trackList: tr });
+                        console.log("\n --> Got file track-list <-- \n");
+                        res.json({ trackList: tr, message: "success getting tack list " });
                         //if (usetimerPauser) timedPaused();
-                    }).catch((error) => { console.log(error); })
+                    }).catch((error) => {
+                        console.log(error);
+                        res.status(500).json({ error: "Error gettin track" });
+
+                    })
 
                     //res.json({ message: 'File exists, opening...' });
                 });        //
-            }, 1000);
+                // })
+                // .catch((err) => {
+                //     console.error('\n --> Error checking directory:  <-- \n', err);
+                //     res.status(500).json({ error: { message: 'Failed to check directory' } });
+
+                // });
+                //setTimeout(() => {
+                // }, 1000);
+            }).catch((err) => {
+
+                console.error('\n --> Error opening file:  <-- \n', err);
+                res.status(500).json({ error: { message: 'Failed to open file' } });
+            });
+
 
         } else {
             inputFile = file_path;
-            console.log("Can open video with player ", inputFile);
+            console.log("\n -->  Can open video with player  <-- \n", inputFile);
             res.json({ trackList: inputFile });
         }
 
     } else {
-        res.status(500).json({ error: "Error file doesn't exist" });
+        res.status(500).json({ error: { message: "\n -->  File doesn't exist" } });
     }
 
 });
@@ -760,7 +799,19 @@ app.post('/mpv-pause-cycle', async (req, res) => {
         //   if (isMpvPaused)   player.resume();
         //     else  player.pause();
         console.log("Cycle pause");
-        player.command("cycle", "pause");
+        let ret = player.command("cycle", "pause");
+        ret.then((res) => {
+            player.getProperty("pause")
+                .then((res) => {
+                    if (res) {
+                        console.log("---> debug Pause ON <--- \n")
+                        debugPaused = true;
+                    } else {
+                        console.log("---> debug Pause OFF <--- \n")
+                        debugPaused = false;
+                    }
+                }).catch((e) => { console.log(e) });
+        }).catch((e) => { console.log(e) });
         res.json({ message: 'Cycle command received successfully.' });
 
     } catch (error) {
@@ -819,37 +870,38 @@ app.post('/mpv-seek', (req, res) => {
 app.post('/mpv-get-perc-pos', (req, res) => {
 
     const clientPlaybackD = req.body.clientPlaybackD;
-    player.getDuration()
-        .then((duration) => {
-            player.getProperty('playback-time').then(pos => {
-                let sliderPos = (pos / duration) * 1000;
-                //let delta = clientPlaybackD;
-                //console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                //if (clientPos)
-                // if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
-                //     player.getProperty("pause")
-                //         .then((res) => {
-                //             if (!res) {
-                //                 console.log("---> pausing delta <--- \n")
-                //                 player.pause();
-                //             }
-                //         }).catch((e) => { console.log(e) });
-                // }
-                // else {
-                //     player.getProperty("pause")
-                //         .then((res) => {
-                //             if (res) {
-                //                 console.log("---> resuming delta <--- \n")
-                //                 player.resume();
-                //             }
-                //         }).catch((e) => { console.log(e) });
-                // }
+    if (player)
+        player.getDuration()
+            .then((duration) => {
+                player.getProperty('playback-time').then(pos => {
+                    let sliderPos = (pos / duration) * 1000;
+                    //let delta = clientPlaybackD;
+                    //console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                    console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                    //if (clientPos)
+                    // if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
+                    //     player.getProperty("pause")
+                    //         .then((res) => {
+                    //             if (!res) {
+                    //                 console.log("---> pausing delta <--- \n")
+                    //                 player.pause();
+                    //             }
+                    //         }).catch((e) => { console.log(e) });
+                    // }
+                    // else {
+                    //     player.getProperty("pause")
+                    //         .then((res) => {
+                    //             if (res) {
+                    //                 console.log("---> resuming delta <--- \n")
+                    //                 player.resume();
+                    //             }
+                    //         }).catch((e) => { console.log(e) });
+                    // }
 
-                res.send({ number: sliderPos });
+                    res.send({ number: sliderPos });
+                }).catch((error) => { console.log(error); })
+
             }).catch((error) => { console.log(error); })
-
-        }).catch((error) => { console.log(error); })
 });
 
 app.get('/mpv-is-player', (req, res) => {

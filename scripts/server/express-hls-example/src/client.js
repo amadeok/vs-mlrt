@@ -91,8 +91,9 @@ function createListElement(name, type, absPath, fileListElem) {
                 alert("Please wait, requesting file");
             else {
                 console.log("play file ")
+
                 requestingFile = true;
-                response = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
+                ret = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
                 // const response = fetch("/mpv-play-file", {
                 //     method: 'POST',
                 //     headers: {
@@ -100,20 +101,38 @@ function createListElement(name, type, absPath, fileListElem) {
                 //     },
                 //     body: JSON.stringify({ absPath: absPath, S: reqtype, index: index }),
                 // });
-                response
-                    .then(response => response.json())
-                    .then(data => {
-                        if (!TCPCheckbox.checked) {
-                            clearInterval(playInterval);
-                            if (hls) {
-                                hls.destroy();
-                            }
-                            video.pause();
-                            startPlayEv();
-                        }
-                        console.log('Play file server response:', data.trackList);
+                ret
+                    .then(response => {
+                        let res = response.body.error;
+                        console.log(" response ", res);
+                        
+                        if (!response.ok) {
+                            return response.json().then((errorData) => {
+                                throw new Error(errorData.error.message);
+                              });                        }
+                        return response.json().then((data) => {
+                            return data;
+                          });        
                     })
-                    .catch(error => { console.error('Error:', error); })
+                    .then((data) => {
+                        console.log("Then success")
+                            if (!TCPCheckbox.checked) {
+                                clearInterval(playInterval);
+                                if (hls) {
+                                    hls.destroy();
+                                }
+                                video.pause();
+                                startPlayEv();
+                            }
+                            console.log('Play file server response:', data.trackList, " error ", data.error);
+                        
+
+                    })
+                    .catch((error) => { 
+                        console.error('Error:',  error.message);                  
+                        alert( error.message);
+                        
+                      })
                     .finally(() => { requestingFile = false; });
             }
         }
@@ -183,7 +202,7 @@ function startHls() {
             currentSegmentStartTime = data.frag.start;
         });
 
-        hls.on(Hls.Events.ERROR, function(event, data) {
+        hls.on(Hls.Events.ERROR, function (event, data) {
             if (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
                 data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {
@@ -285,8 +304,10 @@ subCycleBtn.addEventListener('click', async () => {
 
 audioCycleBtn.addEventListener('click', async () => {
     trackReqFun("audio", "cycle", null);
-
 });
+
+
+
 const seekSlider = document.getElementById('seek-slider');
 const sliderValueDisplay = document.getElementById('slider-value');
 let debounceTimeout;
@@ -383,26 +404,26 @@ function togglePlayPause() {
     }
 }
 
-// playPauseBtn.addEventListener('click', async () => {
-//     // try {
-//     //     const response = await fetch('/mpv-pause-cycle', {
-//     //         method: 'POST',
-//     //     });
-//     //     const data = await response.json();
-//     //     document.getElementById('result').innerText = data.message;
-//     // } catch (error) {
-//     //     // Handle errors, if any
-//     //     console.error('Error:', error);
-//     //     document.getElementById('result').innerText = 'Error occurred. Please try again.';
-//     // }
-//     togglePlayPause();
-// });
+playPauseBtn.addEventListener('click', async () => {
+    try {
+        const response = await fetch('/mpv-pause-cycle', {
+            method: 'POST',
+        });
+        const data = await response.json();
+        document.getElementById('result').innerText = data.message;
+    } catch (error) {
+        // Handle errors, if any
+        console.error('Error:', error);
+        document.getElementById('result').innerText = 'Error occurred. Please try again.';
+    }
+    //togglePlayPause();
+});
 
 
 
 async function makeRequest() {
     try {
-         //console.log("mreq ", bSeeking, hls.levels[hls.currentLevel] , hls.levels[hls.currentLevel].details)
+        //console.log("mreq ", bSeeking, hls.levels[hls.currentLevel] , hls.levels[hls.currentLevel].details)
         if (!bSeeking) {
             if (hls.levels[hls.currentLevel] && hls.levels[hls.currentLevel].details) {
                 let frags = hls.levels[hls.currentLevel].details.fragments;

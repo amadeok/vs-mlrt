@@ -123,7 +123,10 @@ body {
 #audio-cycle-button{
     display:none;
 }
+#triggerButton {
+    display:none;
 
+}
 
 /* audio::-webkit-media-controls-timeline,
 video::-webkit-media-controls-timeline {
