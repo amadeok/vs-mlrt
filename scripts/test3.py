@@ -9,13 +9,21 @@ def getH(): return mult32(th) if autoscale else mult32(video_in_dh)
 cMatrix = '709'
 cRange = 'limited'
 core = vs.core
-clip = video_in
+multiplier = 2
 
 RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
 config = configparser.ConfigParser()
-config.read(RIFEF_CONFIG_FILE)
 
-multiplier = int(config["main"]["multiplier"])
+if RIFEF_CONFIG_FILE:
+    config.read(RIFEF_CONFIG_FILE)
+    try:
+        multiplier = int(config["main"]["multiplier"])
+    except Exception as e:
+        print("Config file doesn't have 'multiplier' option, defaulting to ", multiplier)
+else:
+    print("CONFIG FILE MISSING ")
+
+clip = video_in
 
 try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
 except Exception as e: print(e)

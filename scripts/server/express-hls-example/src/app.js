@@ -32,8 +32,8 @@ if (fs.existsSync(googleDrivePath))
 
 const configFile = inColab ? googleDrivePath + '/rifef/configColab.ini' : __dirname + "/config.ini";
 
-function readINI() {
-    const fileContent = fs.readFileSync(configFile, 'utf8');
+function readINI(configFile_) {
+    const fileContent = fs.readFileSync(configFile_, 'utf8');
     let config = ini.parse(fileContent);
 
     function convertToInt(obj) {
@@ -54,7 +54,33 @@ function readINI() {
     return config;
 }
 
-let config = readINI();
+
+function mergeConfigs(defaultConfig, userConfig) {
+    function mergeProperties(defaultObj, userObj) {
+        for (const key in defaultObj) {
+            if (defaultObj.hasOwnProperty(key)) {
+                // Check if the property is an object (nested section)
+                if (typeof defaultObj[key] === 'object' && !Array.isArray(defaultObj[key])) {
+                    // Recursively merge nested sections
+                    userObj[key] = mergeProperties(defaultObj[key], userObj[key] || {});
+                } else {
+                    // Check if the property exists in userConfig, if not, add it from defaultConfig
+                    if (!(key in userObj)) {
+                        console.log(`Adding missing option "${key}" = ${defaultObj[key]}`)
+                        userObj[key] = defaultObj[key];
+                    }
+                }
+            }
+        }
+        return userObj;
+    }
+
+    return mergeProperties(defaultConfig, userConfig);
+}
+
+let defaultConfig = readINI(__dirname + "/configDef.ini");1
+let config = readINI(configFile);
+mergeConfigs(defaultConfig, config)
 
 let usetimerPauser = false;
 
@@ -690,7 +716,7 @@ app.get('/video2', (req, res) => {
 
 app.get('/mpv-play-file', (req, res) => {
 
-    config = readINI();
+    readINI(configFile_);
     const file = req.query.file || ''; // Get subfolder path from query parameter
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
 
