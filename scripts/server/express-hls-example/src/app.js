@@ -716,7 +716,7 @@ app.get('/video2', (req, res) => {
 
 app.get('/mpv-play-file', (req, res) => {
 
-    readINI(configFile_);
+    readINI(configFile);
     const file = req.query.file || ''; // Get subfolder path from query parameter
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
 
