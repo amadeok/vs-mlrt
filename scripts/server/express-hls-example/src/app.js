@@ -489,7 +489,7 @@ function startMpvEv(file) {
     startMpv(file);
 }
 
-startMpvEv(inputFile);
+//startMpvEv(inputFile);
 
 // mpvProcess.stdout.on('data', (data) => {  console.log(`stdout: ${data}`);  });
 // mpvProcess.stderr.on('data', (data) => {   console.error(`stderr: ${data}`); });
