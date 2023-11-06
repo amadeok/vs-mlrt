@@ -343,87 +343,91 @@ function startMpv(file) {
                 console.error("FFprobe error ", err);
                 reject(err);
             } else {
-                try
-                {
+                try {
+                    let stream = null;
+                    for (var str of metadata.streams)
+                        if (str.codec_type == "video")
+                            stream = str;
+                    if (stream) {
+                        console.log("after check")
+                        if (file == undefined) file = inputFile;
+                        if (player != null) { player.command("quit"); console.log("\n---> quitting mpv <---\n") }
+                        if (latestSSegmentInt)
+                            clearInterval(latestSSegmentInt);
+                        player = null;
+                        let delcmd = "rm -f " + streamPath + "*";
+                        execSync(delcmd);
 
-                if (file == undefined) file = inputFile;
-                if (player != null) { player.command("quit"); console.log("\n---> quitting mpv <---\n") }
-                if (latestSSegmentInt)
-                    clearInterval(latestSSegmentInt);
-                player = null;
-                let delcmd = "rm -f " + streamPath + "*";
-                execSync (delcmd);
+                        //console.log(metadata);
 
-                //console.log(metadata);
-                let stream = null;
-                for (var str of metadata.streams)
-                    if (str.codec_type == "video")
-                        stream = str;
 
-                let args = getArgs(stream, file, inColab);
-                let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
-                console.log("\n---> MPV COMAND: \n", strArgs, "\n");
+                        let args = getArgs(stream, file, inColab);
+                        let strArgs = args.binary + " '" + file + "' " + enc_args.join(" ") + " " + args.vfarg + " " + streamArgs.join(" ") + otherArgs.join(" ");
+                        console.log("\n---> MPV COMAND: \n", strArgs, "\n");
 
-                if (config.debug.useChildSpawn) {
-                    file = ' "' + file + '" ';
-                    let listArgs = [file, ...args.enc_args, args.vfarg, ...streamArgs, ...otherArgs];
-                    console.log("\n---> MPV COMAND (arr): \n ", args.binary, listArgs, "\n");
+                        if (config.debug.useChildSpawn) {
+                            file = ' "' + file + '" ';
+                            let listArgs = [file, ...args.enc_args, args.vfarg, ...streamArgs, ...otherArgs];
+                            console.log("\n---> MPV COMAND (arr): \n ", args.binary, listArgs, "\n");
 
-                    const cp = spawn(args.binary, listArgs, {
-                        stdio: 'inherit',
-                        shell: true
-                    });
-                    // console.log("\n\nNICENESS");
+                            const cp = spawn(args.binary, listArgs, {
+                                stdio: 'inherit',
+                                shell: true
+                            });
+                            // console.log("\n\nNICENESS");
 
-                    // try {
-                    //     const stdout = execSync('ps aux | grep mpv').toString();
-                    //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
-                    //     processes.forEach(processInfo => {
-                    //         const columns = processInfo.trim().split(/\s+/);
-                    //         const pid = columns[1];
-                    //         spawnSync('renice', ['-n', "-19", '-p', pid] , { stdio: 'inherit', shell: true});
-                    //         const niceness = columns[17]; // Niceness value is usually found at index 17
-                    //         const ret = spawnSync("ps", ["-o", "pid,ni,cmd", "-p", pid], {
-                    //             stdio: 'inherit',
-                    //             shell: true
-                    //         });
-                    //         //console.log(`PID: ${pid}, Niceness: ${niceness}`);
-                    //     });
-                    // } catch (error) {
-                    //     console.error(`Error: ${error.message}`);
-                    // }
-                    //console.log("NICENESS\n\n");
+                            // try {
+                            //     const stdout = execSync('ps aux | grep mpv').toString();
+                            //     const processes = stdout.split('\n').filter(line => line.includes('mpv'));
+                            //     processes.forEach(processInfo => {
+                            //         const columns = processInfo.trim().split(/\s+/);
+                            //         const pid = columns[1];
+                            //         spawnSync('renice', ['-n', "-19", '-p', pid] , { stdio: 'inherit', shell: true});
+                            //         const niceness = columns[17]; // Niceness value is usually found at index 17
+                            //         const ret = spawnSync("ps", ["-o", "pid,ni,cmd", "-p", pid], {
+                            //             stdio: 'inherit',
+                            //             shell: true
+                            //         });
+                            //         //console.log(`PID: ${pid}, Niceness: ${niceness}`);
+                            //     });
+                            // } catch (error) {
+                            //     console.error(`Error: ${error.message}`);
+                            // }
+                            //console.log("NICENESS\n\n");
 
-                    // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
-                    //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
-                    //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
+                            // childProcess.stdout.on('data', (data) => {                console.log(`stdout: ${data.toString()}`);             });
+                            //  childProcess.on('error', (err) => {                console.error(`Error: ${err.message}`);            });
+                            //  childProcess.on('close', (code) => {                console.log(`Child process exited with code ${code}`);             });
+                        }
+                        else {
+                            exec(args.strArgs, (error, stdout, stderr) => {
+                                if (error) { console.error(`Error occurred: ${error.message}`); return; }
+                                if (stderr) { console.error(`stderr: ${stderr}`); return; }
+                                console.log(`stdout: ${stdout}`);
+                            });
+                        }
+                        // if (!usetimerPauser)
+                        checkFile(streamPath + "out.m3u8", () => {
+                            console.log(`File ${streamPath + "out.m3u8"} exists, starting segment check`);
+                            latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+                            //res.json({ message: 'File exists, opening...' });
+                        });
+
+                        setTimeout(() => {
+                            const pl = new mpv.MPVClient(socketPath);
+                            //pl.command("cycle", "pause");
+                            //pl.command("quit");
+                            player = pl;
+                        }, 500);
+                        resolve(metadata);
+                    } else {
+                        reject("file doesn't have video stream");
+                    }
                 }
-                else {
-                    exec(args.strArgs, (error, stdout, stderr) => {
-                        if (error) { console.error(`Error occurred: ${error.message}`); return; }
-                        if (stderr) { console.error(`stderr: ${stderr}`); return; }
-                        console.log(`stdout: ${stdout}`);
-                    });
+                catch (error) {
+                    console.error('Caught an error:', error.message);
+                    reject(error.message);
                 }
-                // if (!usetimerPauser)
-                checkFile(streamPath + "out.m3u8", () => {
-                    console.log(`File ${streamPath + "out.m3u8"} exists, starting segment check`);
-                    latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
-                    //res.json({ message: 'File exists, opening...' });
-                });
-
-                setTimeout(() => {
-                    const pl = new mpv.MPVClient(socketPath);
-                    //pl.command("cycle", "pause");
-                    //pl.command("quit");
-                    player = pl;
-                }, 500);
-                resolve(metadata);
-            }
-            catch (error) {
-                console.error('Caught an error:', error.message);
-                reject(error.message);
-              }
             }
         });
     })
