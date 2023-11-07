@@ -12,3 +12,5 @@ scripts/server/express-hls-example/node_modules/
 vapoursynth_r61_ubuntu_22.04/vapour/vapoursynth/
 vapoursynth_r61_ubuntu_22.04.2_colab_LTS.zip
 scripts/__pycache__/vsmlrt.cpython-311.pyc
+output.avi
+test.mp4
