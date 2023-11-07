@@ -21,7 +21,6 @@ cRange = 'limited'
 core = vs.core
 multiplier = 2
 
-<<<<<<< Updated upstream
 RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
 config = configparser.ConfigParser()
 
@@ -36,8 +35,6 @@ else:
 
 clip = video_in
 
-
->>>>>>> Stashed changes
 
 try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
 except Exception as e: print(e)
