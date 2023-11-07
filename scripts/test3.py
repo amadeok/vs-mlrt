@@ -4,6 +4,16 @@ import time, vapoursynth as vs, fractions, configparser, os
 from vsmlrt import RIFE, RIFEModel, Backend
 def mult32(number):  return  ((number + 31) // 32) * 32
 tw = 1280; th =720; autoscale = False
+
+RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
+if not RIFEF_CONFIG_FILE: RIFEF_CONFIG_FILE = r"F:\all\GitHub\vs-mlrt\scripts\server\express-hls-example\src\config.ini"
+print("RIFEF_CONFIG_FILE: ", RIFEF_CONFIG_FILE)
+assert(os.path.isfile(RIFEF_CONFIG_FILE))
+config = configparser.ConfigParser()
+ret = config.read(RIFEF_CONFIG_FILE)
+
+multiplier = int(config["main"]["multiplier"])
+
 def getW(): return  mult32(tw) if autoscale  else mult32(video_in_dw)
 def getH(): return mult32(th) if autoscale else mult32(video_in_dh)
 cMatrix = '709'
@@ -11,6 +21,7 @@ cRange = 'limited'
 core = vs.core
 multiplier = 2
 
+<<<<<<< Updated upstream
 RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
 config = configparser.ConfigParser()
 
@@ -24,6 +35,10 @@ else:
     print("CONFIG FILE MISSING ")
 
 clip = video_in
+=======
+
+
+>>>>>>> Stashed changes
 
 try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
 except Exception as e: print(e)
