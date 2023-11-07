@@ -35,7 +35,6 @@ else:
     print("CONFIG FILE MISSING ")
 
 clip = video_in
-=======
 
 
 >>>>>>> Stashed changes

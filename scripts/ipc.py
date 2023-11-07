@@ -7,6 +7,8 @@ import json
 #echo seek 10 exact > \\.\pipe\mpvpipe
 #echo loadfile "C:\path\to\your\video.mp4" > \\.\pipe\mpvpipe
 #echo show-text "Hello, MPV!" > \\.\pipe\mpvpipe
+#echo cycle pause > \\.\pipe\mpvsocketr2
+#echo quit > \\.\pipe\mpvsocketr2
 
 import win32file  # This module provides access to Windows named pipes
 
