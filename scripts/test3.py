@@ -7,12 +7,12 @@ tw = 1280; th =720; autoscale = False
 
 RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
 if not RIFEF_CONFIG_FILE: RIFEF_CONFIG_FILE = r"F:\all\GitHub\vs-mlrt\scripts\server\express-hls-example\src\config.ini"
-print("RIFEF_CONFIG_FILE: ", RIFEF_CONFIG_FILE)
-assert(os.path.isfile(RIFEF_CONFIG_FILE))
+# print("RIFEF_CONFIG_FILE: ", RIFEF_CONFIG_FILE)
+# assert(os.path.isfile(RIFEF_CONFIG_FILE))
 config = configparser.ConfigParser()
-ret = config.read(RIFEF_CONFIG_FILE)
+# ret = config.read(RIFEF_CONFIG_FILE)
 
-multiplier = int(config["main"]["multiplier"])
+#multiplier = int(config["main"]["multiplier"])
 
 def getW(): return  mult32(tw) if autoscale  else mult32(video_in_dw)
 def getH(): return mult32(th) if autoscale else mult32(video_in_dh)
@@ -20,9 +20,6 @@ cMatrix = '709'
 cRange = 'limited'
 core = vs.core
 multiplier = 2
-
-RIFEF_CONFIG_FILE = os.getenv("RIFEF_CONFIG_FILE")
-config = configparser.ConfigParser()
 
 if RIFEF_CONFIG_FILE:
     config.read(RIFEF_CONFIG_FILE)
