@@ -1,5 +1,55 @@
-import random
+v = 18446744073709551615
 
+#v = 720
+secs = v/(24000/1001)
+mins = secs / 60
+hrs = mins / 60
+
+print(format(secs, '.8f'), format(mins, '.8f'), format(hrs, '.8f'))
+import keyboard
+import time
+
+while True:
+    print("pressed")
+    keyboard.press_and_release('space')
+    time.sleep(10)
+
+
+import socket
+
+
+def client_program():
+    host = "DESKTOP-IA7K3U12"#socket.gethostname()  # as both code is running on same pc
+    port = 5000  # socket server port number
+  
+
+    message = input(" -> ")  # take input
+
+    while message.lower().strip() != 'bye':
+        client_socket.send(message.encode())  # send message
+        data = client_socket.recv(1024).decode()  # receive response
+
+        print('Received from server: ' + data)  # show in terminal
+
+        message = input(" -> ")  # again take input
+
+    client_socket.close()  # close the connection
+
+
+if __name__ == '__main__':
+    client_program()
+
+
+
+
+
+
+
+
+
+
+
+import random
 class mbuf:
     def __init__(s, index) -> None:
         s.dif = 0

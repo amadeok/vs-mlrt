@@ -1071,9 +1071,10 @@ def RIFE(
         output = core.akarin.Select([output0, initial], initial, 'x._SceneChangeNext 1 0 ?')
     else:
         def handler(n: int, f: vs.VideoFrame) -> vs.VideoNode:
-            if f.props.get('_SceneChangeNext'):
+        #    print(dir(f.props), "\n", f.props.values)
+            if f.props.get('_SceneChangeNext'): #if true will not perform interpolation
                 return initial
-            return output0
+            return output0 #will perform interpolation
         output = core.std.FrameEval(output0, handler, initial)
 
     if multi == 2:
