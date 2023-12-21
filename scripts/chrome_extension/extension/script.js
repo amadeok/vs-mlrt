@@ -1,24 +1,61 @@
 
-console.log("script.js loaded and run")
+//function task(){
+    // if (!localStorage.getItem('scriptHasRun')) {
+    //     // Your script logic here
+    //     localStorage.setItem('scriptHasRun', true);
+    //   }
+console.log("script.js loaded and run", localStorage.getItem('scriptHasRun'))
+
+function isVariableDefined(variableName) {
+    return window[variableName] !== undefined; //|| global[variableName] !== undefined;
+    }
+socketDefined = isVariableDefined("socket");
 
 
-const HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
+function connectWebSocket() {
+    HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
 
-const socket = new WebSocket(HOST);
+    socket = new WebSocket(HOST);    
+    console.log("websocket created for ", HOST)
 
-socket.addEventListener('open', (event) => {
-    console.log('Connected to server');
-    socket.send('Hello, world');
-});
+    socket.addEventListener('open', (event) => {
+        console.log('Connected to server');
+        socket.send('Hello, world' + document.title);
+    });
 
-socket.addEventListener('message', (event) => {
-    console.log(`Received ${event.data}`);
-  //  socket.close();
-});
+    socket.addEventListener('message', (event) => {
+        console.log(`Received ${event.data}`);
+    //  socket.close();
+    });
 
-socket.addEventListener('close', (event) => {
-    console.log('Connection closed');
-});
+    socket.addEventListener('close', (event) => {
+        console.log('Connection closed');
+    });
+  }
+
+  
+if (!socketDefined || socketDefined && socket.readyState !== WebSocket.OPEN) {
+    connectWebSocket();
+} else{
+    console.log('socket exists');
+    socket.send('succesive msg from client ' +  document.title);
+
+}
+
+// if (!isVariableDefined("interval")){
+//     console.log("Interval set ")
+//     interval = setInterval(function() {
+//     console.log("Checking socket")
+//     socketDefined = isVariableDefined("socket");
+//     if (!socketDefined || socketDefined && socket.readyState !== WebSocket.OPEN) {
+//             connectWebSocket();
+//     }
+//     }, 10*1000);
+// }
+
+
+// }
+// task();
 
 // // Example WebSocket URL
 // const websocketUrl = 'ws://localhost:8001';

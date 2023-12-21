@@ -4,7 +4,7 @@
   "name": "Element Finder Extension",
   "version": "1.0",
   "permissions": [
-    "tabs","activeTab", "scripting", "storage"
+    "tabs","activeTab", "scripting", "storage","webNavigation"
 ],
 "host_permissions": [
   "<all_urls>"
