@@ -12,4 +12,11 @@ document.addEventListener('DOMContentLoaded', function() {
           'start': 'Y'
       });
   });
+  document.getElementById('extractButton').addEventListener('click', function () {
+    chrome.tabs.query({ active: true }, function (tabs) {
+      console.log("tabb", tabs[0])
+      chrome.runtime.sendMessage({ action: 'extractAttributes', tabId: tabs[0].id });
+    });
+  });
 });
+

@@ -23,39 +23,109 @@ console.log("hello back")
 //   });
 // });
 
+// chrome.tabs.onActivated.addListener( function(activeInfo){
+//   chrome.tabs.get(activeInfo.tabId, function(tab){
+//       y = tab.url;
+//       console.log("you are here: "+y);
+//   });
+// });
+
+// chrome.tabs.onUpdated.addListener((tabId, change, tab) => {
+//   if (tab.active && change.url) {
+//       console.log("you are here: "+change.url);           
+//   }
+// });
+HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
+
+socket = new WebSocket(HOST);    
+console.log("websocket created for ", HOST)
+
+socket.addEventListener('open', (event) => {
+    console.log('Connected to server');
+    socket.send('Hello, world, test back:' );
+});
+
+socket.addEventListener('message', (event) => {
+//      console.log("event ", event)
+    const message = JSON.parse(event.data);
+
+    if (message.type === 'perform_operation') {
+         console.log('Performing operation:', message.operation_type);
+         console.log("element title: ", document.title, "| cap win title: ", message.cap_win_title)
+         if (!message.cap_win_title.includes(document.title)){
+            socket.send('Closing socket with title "' + document.title +  "\" because of title mismatch");
+
+            socket.close(1000, 'Closing connection gracefully because title mismatch');
+         }
+    }else if (message.type === 'message') {
+        console.log('Server message :', message.message_content);
+    }
+});
+
+
+socket.addEventListener('close', (event) => {
+    console.log('Connection closed');
+});
 
 console.log("Bg Interval set ")
 interval = setInterval(function() {
-  chrome.tabs.query({ active: true }, function (tabs) {
+  chrome.tabs.query({ active: true  }, function (tabs) { // lastFocusedWindow: true 
+  //  console.log("tabs ", tabs)
 
-    var activeTab = tabs[0]; // can be more than one if there are multiple windows
+    chrome.windows.getCurrent(function(window) {
+      //console.log(window);
+      // You can access window properties like window.id, window.title, etc.
+       
+      var activeTab = tabs[0]; // can be more than one if there are multiple windows
+      let found = false;
+      for (var tab of tabs) {
+       // if (tab.windowId == window.id)
+       if (tab.title.includes("Netflix"))
+        {
+          found = true;
+          activeTab = tab;
+        }
+      }
+      if (!found)
+        console.log("warning: faled to match active window to active tab:", activeTab)
+      else
+        console.log("activeTab matched to window", activeTab)
+        chrome.tabs.sendMessage(activeTab.id, { action: 'extractAttributes' });
 
-    console.log("tabs", tabs)
-    console.log("activeTab", activeTab)
-
-    chrome.scripting.executeScript({
-      target: { tabId: activeTab.id },
-      files: ['script.js'],
+      // chrome.scripting.executeScript({
+      //   target: { tabId: activeTab.id },
+      //   files: ['script.js'],
+    //  });
     });
+
+
   
 });
 }, 10*1000);
 
 
 
-
-//if ( window["injectedStatus"] === undefined)
-let injectedStatus = {};
-
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-  var tabId = sender.tab.id;
-
-  if (request.action === "checkInjected") {
-    sendResponse({ injected: injectedStatus[tabId] });
-  } else if (request.action === "setInjected") {
-    injectedStatus[tabId] = true;
+  console.log("back on message ", request)
+  if (request.action === 'extractAttributes') {
+    chrome.tabs.sendMessage(request.tabId, { action: 'extractAttributes' });
   }
 });
+
+
+
+// //if ( window["injectedStatus"] === undefined)
+// let injectedStatus = {};
+
+// chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+//   var tabId = sender.tab.id;
+
+//   if (request.action === "checkInjected") {
+//     sendResponse({ injected: injectedStatus[tabId] });
+//   } else if (request.action === "setInjected") {
+//     injectedStatus[tabId] = true;
+//   }
+// });
 
 
 

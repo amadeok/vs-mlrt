@@ -4,7 +4,7 @@
     //     // Your script logic here
     //     localStorage.setItem('scriptHasRun', true);
     //   }
-console.log("script.js loaded and run", localStorage.getItem('scriptHasRun'))
+//console.log("script.js loaded and run", localStorage.getItem('scriptHasRun'))
 
 function isVariableDefined(variableName) {
     return window[variableName] !== undefined; //|| global[variableName] !== undefined;
@@ -20,13 +20,26 @@ function connectWebSocket() {
 
     socket.addEventListener('open', (event) => {
         console.log('Connected to server');
-        socket.send('Hello, world' + document.title);
+        socket.send('Hello, world, title:' + document.title);
     });
 
     socket.addEventListener('message', (event) => {
-        console.log(`Received ${event.data}`);
-    //  socket.close();
+  //      console.log("event ", event)
+        const message = JSON.parse(event.data);
+    
+        if (message.type === 'perform_operation') {
+             console.log('Performing operation:', message.operation_type);
+             console.log("element title: ", document.title, "| cap win title: ", message.cap_win_title)
+             if (!message.cap_win_title.includes(document.title)){
+                socket.send('Closing socket with title "' + document.title +  "\" because of title mismatch");
+
+                socket.close(1000, 'Closing connection gracefully because title mismatch');
+             }
+        }else if (message.type === 'message') {
+            console.log('Server message :', message.message_content);
+        }
     });
+    
 
     socket.addEventListener('close', (event) => {
         console.log('Connection closed');
@@ -35,7 +48,10 @@ function connectWebSocket() {
 
   
 if (!socketDefined || socketDefined && socket.readyState !== WebSocket.OPEN) {
+    console.time('connectWebSocket');
     connectWebSocket();
+    console.timeEnd('connectWebSocket');
+
 } else{
     console.log('socket exists');
     socket.send('succesive msg from client ' +  document.title);
