@@ -35,73 +35,232 @@ console.log("hello back")
 //       console.log("you are here: "+change.url);           
 //   }
 // });
-HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
 
-socket = new WebSocket(HOST);    
-console.log("websocket created for ", HOST)
+// var injectedPages = [];
 
-socket.addEventListener('open', (event) => {
-    console.log('Connected to server');
-    socket.send('Hello, world, test back:' );
-});
-
-socket.addEventListener('message', (event) => {
-//      console.log("event ", event)
-    const message = JSON.parse(event.data);
-
-    if (message.type === 'perform_operation') {
-         console.log('Performing operation:', message.operation_type);
-         console.log("element title: ", document.title, "| cap win title: ", message.cap_win_title)
-         if (!message.cap_win_title.includes(document.title)){
-            socket.send('Closing socket with title "' + document.title +  "\" because of title mismatch");
-
-            socket.close(1000, 'Closing connection gracefully because title mismatch');
-         }
-    }else if (message.type === 'message') {
-        console.log('Server message :', message.message_content);
-    }
-});
+// chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+//   if (request.action === "scriptInjected") {
+//     if (injectedPages.indexOf(sender.url) === -1) {
+//       injectedPages.push(sender.url);
+//       console.log("Content script has been injected on pages:", injectedPages);
+//     }
+//   }
+// });
 
 
-socket.addEventListener('close', (event) => {
-    console.log('Connection closed');
-});
+class WebSocketClient {
+  constructor(host) {
+    this.HOST = host;
 
-console.log("Bg Interval set ")
-interval = setInterval(function() {
-  chrome.tabs.query({ active: true  }, function (tabs) { // lastFocusedWindow: true 
-  //  console.log("tabs ", tabs)
+    this.createSocket();
 
-    chrome.windows.getCurrent(function(window) {
-      //console.log(window);
-      // You can access window properties like window.id, window.title, etc.
-       
-      var activeTab = tabs[0]; // can be more than one if there are multiple windows
-      let found = false;
-      for (var tab of tabs) {
-       // if (tab.windowId == window.id)
-       if (tab.title.includes("Netflix"))
-        {
-          found = true;
-          activeTab = tab;
-        }
+    setInterval(() => {
+      if (this.socket.readyState !== WebSocket.OPEN) {
+        this.createSocket();
+      } else {
+        //   console.log('socket exists');
+        // this.socket.send('succesive msg from client ' + document.title);
       }
-      if (!found)
-        console.log("warning: faled to match active window to active tab:", activeTab)
-      else
-        console.log("activeTab matched to window", activeTab)
-        chrome.tabs.sendMessage(activeTab.id, { action: 'extractAttributes' });
 
-      // chrome.scripting.executeScript({
-      //   target: { tabId: activeTab.id },
-      //   files: ['script.js'],
-    //  });
+    }, 10000);
+
+  }
+  createSocket() {
+    this.socket = new WebSocket(this.HOST);
+    this.socket.addEventListener('open', this.onOpen.bind(this));
+    this.socket.addEventListener('message', this.onMessage.bind(this));
+    this.socket.addEventListener('close', this.onClose.bind(this));
+  }
+
+  getMostSimilarWin(cap_win_rect) {
+    return new Promise((resolve, reject) => {
+      chrome.windows.getAll({ populate: true }, function (windows) {
+        if (chrome.runtime.lastError) {
+          // Handle errors
+          reject(chrome.runtime.lastError);
+        } else {
+          // Resolve with the windows when the operation is completed
+          chrome.windows.getAll({ populate: false }, function (windows) {
+            const givenPosition = { left: cap_win_rect.left, top: cap_win_rect.top };
+            const givenSize = { width: cap_win_rect.w, height: cap_win_rect.h };
+            let mostSimilarWindow = null;
+            let minDifference = Number.MAX_SAFE_INTEGER;
+            windows.forEach(function (window) {
+              const positionDifference = Math.abs(window.left - givenPosition.left) + Math.abs(window.top - givenPosition.top);
+              const sizeDifference = Math.abs(window.width - givenSize.width) + Math.abs(window.height - givenSize.height);
+              const totalDifference = positionDifference + sizeDifference;
+              // console.log("pos dif: ", positionDifference, " | size dif ", sizeDifference )
+              // Update the most similar window if the current window is closer
+              if (totalDifference < minDifference) {
+                minDifference = totalDifference;
+                mostSimilarWindow = window;
+              }
+            });
+            // console.log("Most Similar Window:", mostSimilarWindow);
+            resolve(mostSimilarWindow);
+          });
+        }
+      });
     });
+  }
+
+  determineTab(cap_win_title, cap_win_rect, this_) {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.query({}, function (tabs) {
+        let activeTab = null;
+
+        const filteredTabs = tabs.filter(tab => cap_win_title.includes(tab.title));
+
+        this_.getMostSimilarWin(cap_win_rect)
+          .then(mostSimilarWindow => {
+            let win = mostSimilarWindow;
+
+            if (filteredTabs.length == 0) {
+              console.log("Tab not found from given cap win title:", cap_win_title, " getting active tab of most similar window");
+              const filteredByActive = tabs.filter(tab => tab.active == true);
+              activeTab = filteredByActive[0]
+              if (filteredByActive.length > 1) {
+                this_.socket.send('More than one tab found, try keeping only one open');
+              }
+            } else if (filteredTabs.length > 1) {
+              console.log("Found multiple tabs with title ", cap_win_title, ", comparing against given window")
+              const filteredByWin = filteredTabs.filter(tab => tab.windowId == win.id);
+              if (filteredTabs.length > 1) {
+                const filteredByActive = filteredTabs.filter(tab => tab.active == true);
+                activeTab = (filteredByActive.length > 0) ? filteredByActive[0] : null;
+                if (filteredByActive.length > 1) {
+                  this_.socket.send('More than one tab with title: "' + cap_win_title + '" found, close one');
+                }
+              } else
+                activeTab = (filteredByWin.length > 0) ? filteredByWin[0] : null;
+            } else {
+              activeTab = (filteredTabs.length > 0) ? filteredTabs[0] : null;
+              if (filteredTabs[0] && filteredTabs[0].windowId != win.id)
+                console.log("Tab with title found but doesn't match found window id");
+            }
+
+            resolve(activeTab);
+          })
+          .catch(error => {
+            console.log("Error getting windows:", error);
+            reject(error);
+          });
+      });
+    });
+  }
+
+  onOpen(event) {
+    console.log('Connected to server');
+    this.socket.send('Hello, world, test back:');
+  }
+
+  onMessage(event) {
+    const message = JSON.parse(event.data);
+    if (message.type === 'perform_operation') {
+      console.log('Performing operation:', message.operation_type);
+      //console.log("cap win title: ", message.cap_win_title, "|", message.cap_win_rect);
+      // this.cap_win_title = message.cap_win_title;
+      // this.cap_win_rect = message.cap_win_rect;
+      this.determineTab(message.cap_win_title, message.cap_win_rect, this)
+        .then(selectedTab => {
+          console.log('Selected tab: "', selectedTab.title, '" | win id ', selectedTab.windowId, selectedTab.tabId, selectedTab.active)
+
+          chrome.scripting.executeScript({ //to inject into video iframe for crunchyroll
+            "files": ["content.js"],
+            "target": { tabId: selectedTab.id, "allFrames": selectedTab.title.includes("Crunchyroll") }
+          }, result => {
+            if (chrome.runtime.lastError) {
+              console.error(chrome.runtime.lastError);
+            } else {// console.log('Script execution result:', result);
+              chrome.tabs.sendMessage(selectedTab.id, { action: { task: 'extractAttributes', arg1: 10 } },
+                function (response) {
+                  if (chrome.runtime.lastError) { console.log("ERROR", chrome.runtime.lastError); }
+                  else { console.log('Response received:', response);  }
+                });
+            }
+          });
+          // chrome.tabs.sendMessage(selectedTab.id, { action: {task: 'extractAttributes', arg1: 10}});
+        }).catch(error => { console.log(error); });
+
+    } else if (message.type === 'message') {
+      console.log('Server message:', message.message_content, " | ", message.cap_win_title, message.cap_win_rect.left,
+        message.cap_win_rect.top, message.cap_win_rect.w, message.cap_win_rect.h);
+    }
+  }
+
+  onClose(event) {
+    console.log('Connection closed');
+  }
+}
+
+const myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+console.log("websocket created for ", myWebSocket.HOST);
 
 
-  
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  if (request.action === "getIframeIds") {
+    // Log or handle the iframe IDs in the background script
+    console.log("Iframe IDs in the current tab:", request.iframeIds);
+  }
 });
-}, 10*1000);
+
+
+//let windowList = null;
+
+// console.log("Bg Interval set ")
+// interval = setInterval(function() {
+//   chrome.windows.getAll({ populate: false }, function (windows) {
+//     if (chrome.runtime.lastError) {
+//         console.error(chrome.runtime.lastError);
+//         return;
+//     }
+//     windowList = windows;
+//     console.log("Windows :");
+//     windowList.forEach(function (window) {
+//       //console.log(window);
+//          console.log("Window Position - Left:", window.left, ", Top:", window.top, " Width:", window.width, ", Height:", window.height);
+//     });
+//     console.log("----------------------------");
+// });
+
+//   chrome.tabs.query({ active: true  }, function (tabs) { // lastFocusedWindow: true 
+//   //  console.log("tabs ", tabs)
+
+//     chrome.windows.getCurrent(function(window) {
+//       //console.log(window);
+//       // You can access window properties like window.id, window.title, etc.
+
+//       var activeTab = tabs[0]; // can be more than one if there are multiple windows
+//       let found = false;
+//       for (var tab of tabs) {
+//        // if (tab.windowId == window.id)
+//        if (tab.title.includes("Netflix"))
+//         {
+//           found = true;
+//           activeTab = tab;
+//         }
+//       }
+//       if (!found)
+//         console.log("warning: faled to match active window to active tab:", activeTab)
+//       else
+//         console.log("activeTab matched to window", activeTab)
+
+//       //   chrome.scripting.executeScript({ //to inject into video iframe for crunchyroll
+//       //     "files": ["script.js"],
+//       //     "target": {tabId: activeTab.id, "allFrames" : true}
+//       // });
+//         chrome.tabs.sendMessage(activeTab.id, { action: 'extractAttributes' });
+
+//       // chrome.scripting.executeScript({
+//       //   target: { tabId: activeTab.id },
+//       //   files: ['script.js'],
+//     //  });
+//     });
+
+
+
+// });
+// }, 10*1000);
 
 
 

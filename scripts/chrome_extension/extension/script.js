@@ -1,4 +1,11 @@
+var video = document.querySelector("video");
 
+console.log("script js ----->", document.title, video)
+if (video){
+    video.currentTime = 1000; //doesn't work on netflix
+    console.log("video.currentTime ----->", video.currentTime, video.duration)
+
+}
 //function task(){
     // if (!localStorage.getItem('scriptHasRun')) {
     //     // Your script logic here
@@ -6,57 +13,57 @@
     //   }
 //console.log("script.js loaded and run", localStorage.getItem('scriptHasRun'))
 
-function isVariableDefined(variableName) {
-    return window[variableName] !== undefined; //|| global[variableName] !== undefined;
-    }
-socketDefined = isVariableDefined("socket");
+// function isVariableDefined(variableName) {
+//     return window[variableName] !== undefined; //|| global[variableName] !== undefined;
+//     }
+// socketDefined = isVariableDefined("socket");
 
 
-function connectWebSocket() {
-    HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
+// function connectWebSocket() {
+//     HOST = 'ws://127.0.0.1:65432'; // WebSocket server address
 
-    socket = new WebSocket(HOST);    
-    console.log("websocket created for ", HOST)
+//     socket = new WebSocket(HOST);    
+//     console.log("websocket created for ", HOST)
 
-    socket.addEventListener('open', (event) => {
-        console.log('Connected to server');
-        socket.send('Hello, world, title:' + document.title);
-    });
+//     socket.addEventListener('open', (event) => {
+//         console.log('Connected to server');
+//         socket.send('Hello, world, title:' + document.title);
+//     });
 
-    socket.addEventListener('message', (event) => {
-  //      console.log("event ", event)
-        const message = JSON.parse(event.data);
+//     socket.addEventListener('message', (event) => {
+//   //      console.log("event ", event)
+//         const message = JSON.parse(event.data);
     
-        if (message.type === 'perform_operation') {
-             console.log('Performing operation:', message.operation_type);
-             console.log("element title: ", document.title, "| cap win title: ", message.cap_win_title)
-             if (!message.cap_win_title.includes(document.title)){
-                socket.send('Closing socket with title "' + document.title +  "\" because of title mismatch");
+//         if (message.type === 'perform_operation') {
+//              console.log('Performing operation:', message.operation_type);
+//              console.log("element title: ", document.title, "| cap win title: ", message.cap_win_title)
+//              if (!message.cap_win_title.includes(document.title)){
+//                 socket.send('Closing socket with title "' + document.title +  "\" because of title mismatch");
 
-                socket.close(1000, 'Closing connection gracefully because title mismatch');
-             }
-        }else if (message.type === 'message') {
-            console.log('Server message :', message.message_content);
-        }
-    });
+//                 socket.close(1000, 'Closing connection gracefully because title mismatch');
+//              }
+//         }else if (message.type === 'message') {
+//             console.log('Server message :', message.message_content);
+//         }
+//     });
     
 
-    socket.addEventListener('close', (event) => {
-        console.log('Connection closed');
-    });
-  }
+//     socket.addEventListener('close', (event) => {
+//         console.log('Connection closed');
+//     });
+//   }
 
   
-if (!socketDefined || socketDefined && socket.readyState !== WebSocket.OPEN) {
-    console.time('connectWebSocket');
-    connectWebSocket();
-    console.timeEnd('connectWebSocket');
+// if (!socketDefined || socketDefined && socket.readyState !== WebSocket.OPEN) {
+//     console.time('connectWebSocket');
+//     connectWebSocket();
+//     console.timeEnd('connectWebSocket');
 
-} else{
-    console.log('socket exists');
-    socket.send('succesive msg from client ' +  document.title);
+// } else{
+//     console.log('socket exists');
+//     socket.send('succesive msg from client ' +  document.title);
 
-}
+// }
 
 // if (!isVariableDefined("interval")){
 //     console.log("Interval set ")
