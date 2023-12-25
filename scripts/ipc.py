@@ -9,6 +9,8 @@ import json
 #echo show-text "Hello, MPV!" > \\.\pipe\mpvpipe
 #echo cycle pause > \\.\pipe\mpvsocketr2
 #echo quit > \\.\pipe\mpvsocketr2
+#echo '{ "command": ["set_property", "test_prop", "23"] }' | socat - \\.\pipe\mpvsocketr2
+#echo set test_prop 23 > \\.\pipe\mpvsocketr2
 
 import win32file  # This module provides access to Windows named pipes
 

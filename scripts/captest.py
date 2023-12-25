@@ -1,5 +1,53 @@
 v = 18446744073709551615
 
+
+import win32pipe
+import win32file
+
+# Specify the path to the named pipe
+pipe_path = r"\\.\pipe\rife_player_mpv_lua_pipe"
+
+# Create the named pipe
+pipe = win32pipe.CreateNamedPipe(
+    pipe_path,
+    win32pipe.PIPE_ACCESS_DUPLEX,
+    win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+    1,  # Number of instances
+    65536,  # Out buffer size
+    65536,  # In buffer size
+    0,  # Default timeout
+    None  # Security attributes
+)
+
+if pipe:
+    print(f"Named pipe '{pipe_path}' created successfully.")
+
+    # Wait for a client to connect
+    win32pipe.ConnectNamedPipe(pipe, None)
+
+    try:
+        # Read data from the named pipe
+        data = win32file.ReadFile(pipe, 4096, None)
+        print(f"Received data: {data[1]}")
+        msg = data[1] + b"sent back"
+        size_ =  len(msg).to_bytes(2, "big")
+        win32file.WriteFile(pipe, size_)
+        win32file.WriteFile(pipe, msg)
+    except Exception as e:
+        print(f"Error reading from the named pipe: {e}")
+    finally:
+        # Close the named pipe
+        win32file.CloseHandle(pipe)
+else:
+    print(f"Failed to create named pipe '{pipe_path}'.")
+
+
+
+
+
+
+
+
 #v = 720
 secs = v/(24000/1001)
 mins = secs / 60
