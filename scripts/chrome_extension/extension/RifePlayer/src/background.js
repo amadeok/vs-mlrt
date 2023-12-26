@@ -179,8 +179,9 @@ class WebSocketClient {
                   else { 
                     console.log('Response received:', response);
                     if (response.data){
-                      console.log('sending response to server:',response.data );
-                      myWebSocket.socket.send(JSON.stringify({ type: "data", data: response.data }));
+                      let obj = { type: "data", data: response.data, resposeOf: message.operation_type }
+                      console.log('sending response to server:',response.data, " | ", obj );
+                      myWebSocket.socket.send(JSON.stringify(obj));
                     }
                   }
                 });
