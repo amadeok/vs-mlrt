@@ -18,6 +18,13 @@ function bytes_to_integer(bytes)
   return result
 end
 
+function encodeBigEndian(value)
+    local byte1 = math.floor(value / 256)
+    local byte2 = value % 256
+    return string.char(byte1, byte2)
+end
+
+
 function round(number)
     local decimal = number % 1
     if decimal >= 0.5 then
@@ -51,9 +58,9 @@ function show_progress_bar(pos, str2)--(position, duration)
     local osd_text = mp.get_property("osd-ass-cc/0") .. text2 .. mp.get_property("osd-ass-cc/1")
     print("(osd_text ",osd_text)
     --mp.osd_message(osd_text, 4)
-    local time_pos = mp.get_property_number("time-pos")
-    local duration = mp.get_property_number("duration")
-    local formatted_time = mp.get_property("osd-ass-cc/0") .. string.format("{\\b1}Time: %.2f / %.2f{\\b0}", time_pos, duration)
+    --local time_pos = mp.get_property_number("time-pos")
+    --local duration = mp.get_property_number("duration")
+    --local formatted_time = mp.get_property("osd-ass-cc/0") .. string.format("{\\b1}Time: %.2f / %.2f{\\b0}", time_pos, duration)
     mp.osd_message(osd_text)
     --mp.commandv("show_text", text, 2);
 end
@@ -113,7 +120,17 @@ function monitor_partial()
     print("numBytesToRead :", numBytesToRead)
 
     local data = file:read(numBytesToRead)
-    local luaTable = json.decode(data)
+    local luaTable = nil
+
+    local success, result = pcall(function()
+        luaTable = json.decode(data)
+    end)
+    
+    if not success then
+        print("An error occurred: " .. result)
+        return 1
+    end
+
     for key, value in pairs(luaTable) do
         print(key, value)
     end
@@ -121,7 +138,11 @@ function monitor_partial()
         print("Received data:")
         local browserCurTime = luaTable["data"]["video_curTime"]
         local browserDuration = luaTable["data"]["video_duration"]
-        browser_video_cur_time_perc = round(length * (1 / (browserDuration / browserCurTime)))
+        if browserCurTime and browserCurTime then
+            browser_video_cur_time_perc = round(length * (1 / (browserDuration / browserCurTime)))
+        else
+            browser_video_cur_time_perc = 0
+        end
         print("browser_video_cur_time_perc", browser_video_cur_time_perc)
 
     elseif luaTable["type"] == "perform_operation" and luaTable["operation_type"] == "show_seek_bar" then
@@ -133,8 +154,26 @@ function monitor_partial()
         else
             show_progress_bar(round(length*perc), string.format("Seeking to %.2f%s",  perc*100, "%" ) )
         end
+    elseif luaTable["type"] == "get_attribute" then
+        local attribute_name = luaTable["attribute_name"]
+        print("attribute_name ", attribute_name)
+        local attr = mp.get_property(attribute_name)
+        print("attr ", attr)
+        local myTable = {
+            attribute_name = attribute_name,
+            attribute_value = attr
+        }
+        local jsonString = json.encode(myTable)
+        size_bytes = encodeBigEndian(string.len(jsonString))
+        file:write(size_bytes)
+        ret = file:write(jsonString)
+        print("end  ", size_bytes, jsonString )
+    elseif luaTable["type"] == "perform_operation" and luaTable["operation_type"] == "quit" then
+        print("LUA SCRIPT EXIT")
+        return true
+        
     end
-    
+    return false
     
     --safe_call()
     -- mp.add_timeout(0, monitor_partial)
@@ -149,12 +188,24 @@ function monitor()
         while true do
             -- file:write("Hello, named pipe!")
             -- file:seek("set", 0)
-           monitor_partial()
+           if (monitor_partial()) then
+                break
+           end
         end
     end
-    pipe:close()
+    local ret = file:close()
+    print("Pipe closed ", ret )
 end
 
 --mp.add_timeout(0, monitor_partial)
 mp.add_timeout(0, monitor)
 --mp.add_periodic_timer(1, monitor_partial)
+
+-- Function to show OSD message when seeking
+function showOSDMessage()
+    local time_pos = mp.get_property_number("time-pos", 0)
+    mp.osd_message("Seeking: " .. string.format("%.2f", time_pos), 2)
+end
+
+-- Bind the function to the "seek" event
+mp.register_event("seek", showOSDMessage)

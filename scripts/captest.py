@@ -4,6 +4,22 @@ v = 18446744073709551615
 import win32pipe
 import win32file
 
+
+
+import cv2
+import sys, numpy as np
+empty_image = np.zeros((100, 100, 3), dtype=np.uint8)
+
+cv2.imshow("sys.argv[1]", empty_image)
+while 1:
+    res = cv2.waitKey(0)
+    print('You pressed %d (0x%x), LSB: %d (%s)' % (res, res, res % 256,
+        repr(chr(res%256)) if res%256 < 128 else '?'))
+
+
+
+
+
 # Specify the path to the named pipe
 pipe_path = r"\\.\pipe\rife_player_mpv_lua_pipe"
 

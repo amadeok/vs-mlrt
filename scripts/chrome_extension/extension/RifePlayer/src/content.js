@@ -174,10 +174,10 @@ if (!window.hasScriptInjected) {
 
     chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       console.log("request", request)
-      console.log("Op: ", request.action.operation_type, " | det ", request.action.operation_details)
+      console.log("Op: ", request.action.operation_type, " | det2 ", request.action.operation_details)
       var videoElement = document.querySelector('video');
 
-      if (request.action.operation_type === 'pause_video') {
+      if (request.action.operation_type === 'video_pause') {
         if (!request.action.operation_details) {
           if (videoElement.paused)
             videoElement.play();
@@ -205,8 +205,16 @@ if (!window.hasScriptInjected) {
       else if (request.action.operation_type === 'get_duration_and_curtime'){
         sendResponse({ operation_result: true, data: {video_duration: videoElement.duration, video_curTime:  videoElement.currentTime} });
       }
+      else if (request.action.operation_type === 'press_key'){
+        var keyEvent1 = new KeyboardEvent("keydown", { bubbles: true,  keyCode: 0 });
+        videoElement.dispatchEvent(keyEvent1);
+        console.log("keycode ", request.action.operation_details)
+        var keyEvent = new KeyboardEvent("keydown", { bubbles: true,  keyCode: request.action.operation_details.keyCode });
+        videoElement.dispatchEvent(keyEvent);
+        sendResponse({ operation_result: true });
+      }
       if (request.action.task === 'extractAttributes') {
-        const elements = document.querySelectorAll('*');
+        const elements = document.querySelectorAll('*'); 
         const attributes = Array.from(elements).map(element => ({
           tag: element.tagName,
           id: element.id,
