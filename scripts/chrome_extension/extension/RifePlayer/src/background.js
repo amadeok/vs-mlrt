@@ -1,6 +1,57 @@
 // opens a communication port
-console.log("hello back")
+// Register the Service Worker
+// navigator.serviceWorker.register('service-worker.js')
+//   .then(registration => {
+//     console.log('Service Worker registered with scope:', registration.scope);
+//   })
+//   .catch(error => {
+//     console.error('Service Worker registration failed:', error);
+//   });
+const  currentTime = new Date().toLocaleTimeString();
+console.log("hello back", currentTime)
 
+chrome.tabs.onActivated.addListener(function(activeInfo) {
+  // activeInfo.tabId contains the ID of the newly activated tab
+  console.log("Tab activated. Tab ID:", activeInfo.tabId);
+
+  // You can perform actions based on the activated tab here
+});
+chrome.runtime.onInstalled.addListener(() => {
+  // Set an initial alarm after installation
+  const currentTime = new Date().toLocaleTimeString();
+  console.log("Current time onInstalled:", currentTime);
+  if (!self.myWebSocket){
+  myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+  console.log("websocket created on Installed for ", myWebSocket.HOST);
+  }
+  chrome.alarms.create("myAlarm", {
+    periodInMinutes: 0.5 // Every 30 seconds
+  });
+});
+
+chrome.runtime.onStartup.addListener(function() {
+  console.log("Extension started (including browser start)");
+  if (!self.myWebSocket){
+    myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+    console.log("websocket created on start for ", myWebSocket.HOST);
+    }
+  
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "myAlarm") {
+    // Perform actions here
+    const currentTime = new Date().toLocaleTimeString();
+
+    console.log("Alarm triggered. Do something... ", currentTime);
+  }
+});
+// chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+//   console.log('wake me up');
+// });
+// chrome.runtime.onStartup.addListener( () => {
+//   console.log(`onStartup()`);
+// });
 // chrome.webNavigation.onCompleted.addListener(function (details) {
 //   console.log("webNavigation", details)
 //   //  if (details.status == 'complete' && details.active) {
@@ -171,15 +222,21 @@ class WebSocketClient {
             "target": { tabId: selectedTab.id, "allFrames": selectedTab.title.includes("Crunchyroll") }
           }, result => {
             if (chrome.runtime.lastError) {
-              console.error(chrome.runtime.lastError);
-            } else {// console.log('Script execution result:', result);
+              console.log("ERROR", chrome.runtime.lastError);
+              myWebSocket.socket.send(JSON.stringify({ type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  }));
+              } else {// console.log('Script execution result:', result);
               chrome.tabs.sendMessage(selectedTab.id, { action: { operation_type:message.operation_type, operation_details: message.operation_details } },
                 function (response) {
-                  if (chrome.runtime.lastError) { console.log("ERROR", chrome.runtime.lastError); }
+                  if (chrome.runtime.lastError) {
+                     console.log("ERROR", chrome.runtime.lastError);
+                     myWebSocket.socket.send(JSON.stringify({ type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  }));
+                     }
                   else { 
                     console.log('Response received:', response);
                     if (response.data){
-                      let obj = { type: "data", data: response.data, resposeOf: message.operation_type }
+                      if (!response.operation_result)
+                        console.log("Error during operation: ", response.error)
+                      let obj = { type: "data", data: response.data, resposeOf: message.operation_type, activeTab: selectedTab.title,  }
                       console.log('sending response to server:',response.data, " | ", obj );
                       myWebSocket.socket.send(JSON.stringify(obj));
                     }
@@ -201,9 +258,12 @@ class WebSocketClient {
   }
 }
 
-myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
-console.log("websocket created for ", myWebSocket.HOST);
-
+if (!self.myWebSocket){
+  myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+  console.log("websocket created on start for ", myWebSocket.HOST);
+  }
+  // myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+  // console.log("websocket created for ", myWebSocket.HOST);
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === "getIframeIds") {
@@ -222,6 +282,12 @@ chrome.commands.onCommand.addListener(function(command) {
   }
 });
 
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  console.log("back on message ", request)
+  if (request.action === 'extractAttributes') {
+    chrome.tabs.sendMessage(request.tabId, { action: 'extractAttributes' });
+  }
+});
 
 //let windowList = null;
 
@@ -282,12 +348,6 @@ chrome.commands.onCommand.addListener(function(command) {
 
 
 
-chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-  console.log("back on message ", request)
-  if (request.action === 'extractAttributes') {
-    chrome.tabs.sendMessage(request.tabId, { action: 'extractAttributes' });
-  }
-});
 
 
 

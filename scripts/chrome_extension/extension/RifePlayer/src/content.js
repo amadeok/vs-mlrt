@@ -23,6 +23,7 @@
 //   }
 // });
 
+
 if (!window.hasScriptInjected) {
   window.hasScriptInjected = true;
   console.log("Content script injected!");
@@ -64,7 +65,7 @@ if (!window.hasScriptInjected) {
         const spaceKeyEvent = new KeyboardEvent("keydown", { bubbles: true, keyCode: 0 });
 
         const videoElement = document.querySelector('video');
-
+//<button aria-label="Play" class="large iconOnly ltr-1akutud" type="button"><div class="large ltr-iyulz3" role="presentation"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="svg-icon svg-icon-play ltr-4z3qvp e1svuwfo1" data-name="Play" aria-hidden="true"><path d="M5 2.69127C5 1.93067 5.81547 1.44851 6.48192 1.81506L23.4069 11.1238C24.0977 11.5037 24.0977 12.4963 23.4069 12.8762L6.48192 22.1849C5.81546 22.5515 5 22.0693 5 21.3087V2.69127Z" fill="currentColor"></path></svg></div></button>
         const checkSeekBar = () => {
           videoElement.dispatchEvent(spaceKeyEvent);
           const seekBar = document.querySelector('[data-uia="timeline"]');
@@ -72,7 +73,13 @@ if (!window.hasScriptInjected) {
             resolve(seekBar);
           } else if (attempts < maxAttempts) {
             attempts++;
-            //console.log("att", attempts)
+            var playButton = document.querySelector('[aria-label="Play"]');
+            if (playButton) {
+              console.log("Found element:", playButton);
+              playButton.click();
+            } else 
+              console.log("Element with aria-label 'Play' not found.");
+                //console.log("att", attempts)
             setTimeout(checkSeekBar, 100); // Check again after 100 milliseconds
           } else {
             reject(new Error(`Maximum attempts (${maxAttempts}) reached. SeekBar not found.`));
@@ -203,7 +210,10 @@ if (!window.hasScriptInjected) {
         }
       }
       else if (request.action.operation_type === 'get_duration_and_curtime'){
-        sendResponse({ operation_result: true, data: {video_duration: videoElement.duration, video_curTime:  videoElement.currentTime} });
+        if (videoElement)
+          sendResponse({ operation_result: true, data: {video_duration: videoElement.duration, video_curTime:  videoElement.currentTime} });
+        else
+          sendResponse({ operation_result: false, data: {video_duration: null, video_curTime:  null}, error: "Video element not found" });
       }
       else if (request.action.operation_type === 'press_key'){
         var keyEvent1 = new KeyboardEvent("keydown", { bubbles: true,  keyCode: 0 });

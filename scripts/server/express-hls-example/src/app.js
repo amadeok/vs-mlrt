@@ -156,8 +156,8 @@ function check32(num1, num2) {
     if (num1 % 32 !== 0 || num2 % 32 !== 0)
         throw new Error('One of the numbers is not a multiple of 32.');
 }
-function getArgs(stream, file, incolab) {
 
+function getArgs(stream, file, incolab) {
 
     let binary = incolab || 1 ? `RIFEF_CONFIG_FILE='${configFile}' LD_LIBRARY_PATH='/usr/lib64-nvidia:/usr/local/lib' ` : " ";
     binary += incolab ? ' /content/mpv_/mpv-build/mpv/build/mpv' : 'mpv';
