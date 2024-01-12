@@ -1,3 +1,12 @@
+import time
+import keyboard
+
+while True:
+    print("pressed")
+    keyboard.press_and_release('space')
+    time.sleep(10)
+
+
 v = 18446744073709551615
 
 
@@ -70,14 +79,6 @@ mins = secs / 60
 hrs = mins / 60
 
 print(format(secs, '.8f'), format(mins, '.8f'), format(hrs, '.8f'))
-import keyboard
-import time
-
-while True:
-    print("pressed")
-    keyboard.press_and_release('space')
-    time.sleep(10)
-
 
 import socket
 

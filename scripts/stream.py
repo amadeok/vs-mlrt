@@ -1,4 +1,6 @@
 import vapoursynth as vs
+import time
+time.asc
 core = vs.core
 
 
