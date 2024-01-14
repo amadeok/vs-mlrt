@@ -156,6 +156,7 @@ command = '{ "command": ["get_property", "test_prop"]}\n'
 
 command =  '{ "command": ["get_property", "script-opts"] }\n' 
 command =  '{ "command": ["quit"] }\n' 
+command =  '{ "command": ["get_property", "height"] }\n' 
 
 
 b = bytes(command, 'utf-8')

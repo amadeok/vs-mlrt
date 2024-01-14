@@ -1,3 +1,31 @@
+import os
+
+import yt_dlp
+
+def get_resolution(video_url, stream_index=0):
+    ydl_opts = {
+        'format': 'best',
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(video_url, download=False)
+        streams = info_dict.get('formats', []) + info_dict.get('entries', [])
+
+        if streams and 0 <= stream_index < len(streams):
+            stream = streams[stream_index]
+            resolution = stream.get('height', 'N/A')
+            return resolution
+        else:
+            return 'Stream index out of range or no streams available.'
+
+# Example usage:
+video_url = r"https://au-d1-01.scws-content.net/download/3/8/1d/81d4aa5d-3189-453b-9a1c-5aaeb400c434/720p.mp4?token=E6CT_1UHSJ_1N0PaMwpbAw&expires=1705173582&filename=UmaMusumePrettyDerbyRoadToTheTop_ONA_01_SUB_ITA.mp4"
+resolution = get_resolution(video_url)
+print(f'Resolution: {resolution}')
+
+
+
+
 import time
 import keyboard
 

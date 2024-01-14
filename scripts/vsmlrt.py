@@ -1316,6 +1316,8 @@ def trtexec(
             cmd = " ".join(args)
             print("using os.system, ", cmd)
             return os.system(cmd)
+    import pyautogui
+    pyautogui.alert('New resolution found, an one time optimization step will be performed for this resolution. It will take a few minutes.', 'New resolution found')
 
     useSubp_ =  not sys.platform.startswith('linu') and 0
     print("USE SUBPROCESS: ", useSubp_)

@@ -227,7 +227,7 @@ function startHls() {
     }
 }
 function startPlayEv() {
-    playInterval = setInterval(makeRequest, 4000);
+   // playInterval = setInterval(makeRequest, 4000);
     setTimeout(() => {
         startHls();
         console.log("video play");

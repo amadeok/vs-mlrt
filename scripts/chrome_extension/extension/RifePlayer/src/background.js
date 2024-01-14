@@ -203,7 +203,7 @@ class WebSocketClient {
 
   onOpen(event) {
     console.log('Connected to server');
-    this.socket.send(JSON.stringify({ type: "log", message: 'Client first message'}));
+    this.socket.send(JSON.stringify({ type: "id_handshake", client_type: 'browser_extension'}));
   }
 
   onMessage(event) {

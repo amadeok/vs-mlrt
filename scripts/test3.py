@@ -17,26 +17,38 @@ config = configparser.ConfigParser()
 def getW(): return  mult32(tw) if autoscale  else mult32(video_in_dw)
 def getH(): return mult32(th) if autoscale else mult32(video_in_dh)
 
+def pad_to_multiple_of_32(clip):
+    width = clip.width
+    height = clip.height
+    pad_left = (32 - (width % 32)) % 32
+    pad_right = (32 - ((width + pad_left) % 32)) % 32
+    pad_top = (32 - (height % 32)) % 32
+    pad_bottom = (32 - ((height + pad_top) % 32)) % 32
+    print(f"Adding borders: pad_left: {pad_left}, pad_right: {pad_right}, pad_top: {pad_top}, pad_bottom: {pad_bottom})")
+    return [clip.std.AddBorders(pad_left, pad_right, pad_top, pad_bottom), [pad_left, pad_right, pad_top, pad_bottom]]
+
+
 clip = video_in
 print("Vapoursynth input format: ", clip.format)
 try:
-    assert(1)
     cMatrix = '709'
     cRange = 'limited'
     core = vs.core
+    # if RIFEF_CONFIG_FILE:
+    #     config.read(RIFEF_CONFIG_FILE)
+    #     try:
+    #         multiplier = int(config["main"]["multiplier"])
+    #     except Exception as e:
+    #         print("Config file doesn't have 'multiplier' option, defaulting to ", multiplier)
+    # else:
+    #     print("CONFIG FILE MISSING ")
     multiplier = 2
-
-    if RIFEF_CONFIG_FILE:
-        config.read(RIFEF_CONFIG_FILE)
-        try:
-            multiplier = int(config["main"]["multiplier"])
-        except Exception as e:
-            print("Config file doesn't have 'multiplier' option, defaulting to ", multiplier)
+    envRPmult = os.getenv("RIFE_PLAYER_MULTIPLIER")
+    if envRPmult:
+        print("Using env variable RIFE_PLAYER_MULTIPLIER: ", envRPmult ) 
+        multiplier = int(envRPmult)
     else:
-        print("CONFIG FILE MISSING ")
-
-
-
+        print("End variable RIFE_PLAYER_MULTIPLIER not found, using default: ", multiplier ) 
     try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
     except Exception as e: 
         print(e)
@@ -55,7 +67,6 @@ try:
         cFamily = 'ColorFamily.YUV'
 
     #print("-----> clip bps1 ", clip[0].format.bits_per_sample )
-
     # if cFamily == 'ColorFamily.RGB':
     #   clip = core.resize.Bicubic(clip, format=vs.RGBS, range_in_s=cRange, filter_param_a=1, filter_param_b=0, width=mult32(getW()), height=mult32(getH()))
     # else:
@@ -71,7 +82,15 @@ try:
     #clip = vs.core.std.CropAbs(clip, left=0, top=0, width=new_width, height=new_height)
     #clip = clip.misc.SCDetect(threshold=0.1)
     #clip = core.std.Expr(clip, "x 1 -")
-
+    oriw = clip.width
+    orih = clip.height
+    padding = None
+    needsPadding = orih % 32 != 0 or oriw % 32 != 0
+    print("oriw orih ", oriw, orih)
+    if needsPadding:
+        clip, padding = pad_to_multiple_of_32(clip)
+    else:
+        print("No padding required ", oriw, "x", orih)
     #print("test3 before bicubic")
     clip = clip.resize.Bicubic(format=vs.RGBH,matrix_in_s="709") #RGBH for 16 bit per sample output
     #print("-----> clip bps2 ", clip[0].format.bits_per_sample )
@@ -81,6 +100,9 @@ try:
     #print("test3 before rife")
 
     clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=multiplier)
+    if needsPadding:
+        clip =  clip.std.Crop(padding[0], padding[1],padding[2],padding[3])
+
     #print("output")
 
    # print("test3 after rife")
