@@ -22,6 +22,8 @@ async function getListOfFiles(subfolder) {
         const response = await fetch(`/files?subfolder=${subfolder}`);
         if (response.ok) {
             const files = await response.json();
+            if (files.error && files.error  == "null network folder")
+                alert("The Rife Player app doesn't appear to be running, launch it, then reload the page");
             return files;
         } else {
             console.error('Error retrieving files:', response.statusText);
@@ -166,7 +168,10 @@ function updateFilebrowser(subfolder) {
     filesProm
         .then((files_) => {
             files = files_;
-            renderFileList(files, subfolder);
+            console.log("files", files)
+            if (files.length)
+                renderFileList(files, subfolder);
+            
         })
         .catch((error) => { console.log(error); })
 }
@@ -227,7 +232,7 @@ function startHls() {
     }
 }
 function startPlayEv() {
-   // playInterval = setInterval(makeRequest, 4000);
+   playInterval = setInterval(makeRequest, 4000);
     setTimeout(() => {
         startHls();
         console.log("video play");
@@ -412,7 +417,6 @@ playPauseBtn.addEventListener('click', async () => {
         const data = await response.json();
         document.getElementById('result').innerText = data.message;
     } catch (error) {
-        // Handle errors, if any
         console.error('Error:', error);
         document.getElementById('result').innerText = 'Error occurred. Please try again.';
     }
@@ -437,6 +441,14 @@ async function makeRequest() {
                     body: JSON.stringify({ clientPlaybackD: d }),
                 });
                 const data = await response.json();
+                if (data.number == -1){
+                    if (playInterval)
+                        clearInterval(playInterval);
+                    videoElement.pause();
+                    showFileBrowser();
+                    alert("Player has stopped")
+
+                }
                 document.getElementById('seek-slider').value = data.number;
             }
         }

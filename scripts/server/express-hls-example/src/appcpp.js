@@ -3,7 +3,7 @@ const app = express();
 //const http = require('http').Server(app);
 const fs = require('fs');
 const hls = require('hls-server');
-let mpv = require('mpv-ipc');
+//let mpv = require('mpv-ipc');
 const { exec, spawnSync, childProcess } = require('child_process');
 const child_process = require('child_process');
 var ffmpeg = require('fluent-ffmpeg');
@@ -111,59 +111,92 @@ function generateUniqueId() {
     return '_' + Math.random().toString(36).substr(2, 9);
 }
 
+function waitUntilEmpty(dictionary, interval, callback) {
+    const checkEmpty = () => {
+        console.log("Waiting until empty");
+        if (Object.keys(dictionary).size === 0) {
+            clearInterval(intervalId);
+            callback();
+        }
+    };
+    const intervalId = setInterval(checkEmpty, interval);
+}
 
 class WebSocketClient {
     constructor(host) {
         this.HOST = host;
         this.messageCallbacks = new Map();
-
+        this.messageIntervals = new Map();
+        this.counter = 0
         this.createSocket();
-
+        // for (let i = 0; i < 300; i++) {
+        //     this.messageCallbacks.push(undefined);
+        //   }
         setInterval(() => {
-            if (this.socket.readyState !== WebSocket.OPEN) {
-                this.createSocket();
-            } else {
-                //   console.log('socket exists');
-                // this.socket.send('succesive msg from client ' + document.title);
-            }
 
+            if (this.socket.readyState !== WebSocket.OPEN) {
+                for (let [key, value] of this.messageCallbacks.entries())      this.messageCallbacks.set(key, {delete: "yes"} );
+
+                //for (let n = 0; n < this.counter+10; n++) this.messageCallbacks[n] = null;
+                waitUntilEmpty(this.messageCallbacks, 500, () => {
+                    this.createSocket();
+                })
+            }
+             //else   //   console.log('socket exists');// this.socket.send('succesive msg from client ' + document.title);
         }, 10000);
 
     }
     createSocket() {
-        this.socket = new WebSocket(this.HOST);
-        this.socket.addEventListener('open', this.onOpen.bind(this));
-        //this.socket.addEventListener('message', this.onMessage.bind(this));
-        this.socket.addEventListener('close', this.onClose.bind(this));
+        try {
+            console.log("Creating new websocket:  ", this.HOST);
+            this.socket = new WebSocket(this.HOST);
+            this.socket.addEventListener('open', this.onOpen.bind(this));
+            //this.socket.addEventListener('message', this.onMessage.bind(this));
+            this.socket.addEventListener('close', this.onClose.bind(this));
+            this.socket.addEventListener('error', (error) => {
+                console.error('WebSocket error:', error);
+            });
+            this.socket.addEventListener('message', (event) => {
+                const receivedMessage = event.data;
+                const messageData = JSON.parse(receivedMessage);
 
-        this.socket.addEventListener('message', (event) => {
-            const receivedMessage = event.data;
-            const messageData = JSON.parse(receivedMessage);
-
-            if (messageData.id && this.messageCallbacks.has(messageData.id)) {
-                this.messageCallbacks[messageData.id] = messageData;
-            } else {
-                console.log('Received message:', receivedMessage);
-                if (messageData.type === 'variables') {
-                    var variablesObject = messageData["variables"];
-                    for (var key in variablesObject) {
-                        if (variablesObject.hasOwnProperty(key)) {
-                            recvVariables[key] = variablesObject[key];
-                            //console.log(key + ": " + variablesObject[key]);
+                if (messageData.id) // && //this.messageCallbacks.has(messageData.id))
+                 {
+                    this.messageCallbacks.set(messageData.id, messageData);
+                  //  this.messageCallbacks[parseInt( messageData.id) ] =  messageData;
+                } 
+                else {
+                    console.log('Received message:', receivedMessage);
+                    if (messageData.type === 'variables') {
+                        var variablesObject = messageData["variables"];
+                        for (var key in variablesObject) {
+                            if (variablesObject.hasOwnProperty(key)) {
+                                recvVariables[key] = variablesObject[key];
+                                //console.log(key + ": " + variablesObject[key]);
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        } catch (error) {
+            console.log("Error creating websocket: ", error);
+        }
+
         
-    }
+    }w
     waitForValueToBecomeOne(key, this_) {
         return new Promise((resolve) => {
           function checkValue() {
-            if (this_.messageCallbacks[key] != null) {
-              console.log(`${key} has become change!`);
+            //let value = this_.messageCallbacks[key]//.get(key)
+            let value = this_.messageCallbacks.get(key)
+
+            if (value && value.delete)
+                console.log("test")
+            if (value != null || this_.socket.readyState !== WebSocket.OPEN || value && value.delete) {
+              console.log(`(${this_.messageCallbacks.size}) ${key} has become change!`);
               this_.messageCallbacks.delete(key);
-              resolve(this_.messageCallbacks[key]);
+              //this_.messageCallbacks[key] = null;
+              resolve(value);
             } else {
               console.log(`Waiting for ${key} to change...`);
               setTimeout(checkValue, 1000); // Check again after 1 second
@@ -173,12 +206,15 @@ class WebSocketClient {
         });
       }
       
-
+      
      sendWithCallback(message) {
         const requestId = generateUniqueId();
         const callback = (response) => { console.log('Received response:', response);        };
-        this.messageCallbacks.set(requestId, 0);
-        const data = {           id: requestId,            message: message        };
+        //this.messageCallbacks[requestId] = null;
+        //this.messageCallbacks.set(requestId, null);
+        this.messageCallbacks.set(requestId, null);
+
+      //  const data = {           id: requestId,            message: message        };
         const jsonData = JSON.stringify(data);
         this.socket.send(jsonData);
         return requestId; // You can use this identifier to track the response
@@ -186,10 +222,19 @@ class WebSocketClient {
 
     sendWithResponse(message) {
         return new Promise((resolve, reject) => {
-            const requestId = generateUniqueId();
+            let requestId =  generateUniqueId() + "_" + message.type ;
+          //  if (message.operation_type) requestId += "_"+message.operation_type;
+          //  if (message.property_name) requestId += "_"+message.property_name;
+
+           // this.messageCallbacks[requestId] = null;
             this.messageCallbacks.set(requestId, null);
+            //let requestId = this.counter;
+            this.counter +=1;
+            this.messageCallbacks[requestId] = null;
             const data = { id: requestId, message: message };
             const jsonData = JSON.stringify(data);
+            if (this.socket.readyState !== WebSocket.OPEN)
+                return;
             this.socket.send(jsonData);
 
             this.waitForValueToBecomeOne(requestId, this)
@@ -205,6 +250,17 @@ class WebSocketClient {
         console.log('Connected to server');
         
         this.socket.send(JSON.stringify({ type: "id_handshake", client_type: 'hls_server' }));
+
+        myWebSocket.sendWithResponse({ type: "get_player_status" })
+            .then(messageData => {
+                if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING") {
+                    if (latestSSegmentInt)
+                        clearInterval(latestSSegmentInt);
+                    latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+                }
+            }).catch(err => { console.log(`Error checking mpv-is-player: ${err}`); });
+
+
         // const requestId = this.sendWithResponse('Hello, server!')
         // .then(innerResult => {
         //     console.log(`ok: ${innerResult}`);
@@ -235,6 +291,10 @@ class WebSocketClient {
     }
 
     onClose(event) {
+         for (let [key, value] of this.messageCallbacks.entries())      this.messageCallbacks.set(key, {delete: "yes"} );
+        
+        //for (n = 0; n < this.counter+10; n++)  this.messageCallbacks[n] = null;
+
         console.log('Connection closed');
     }
 }
@@ -593,6 +653,9 @@ function getLatestHLSSegment(folderPath) {
 function getLatestHLSSegmentF() {
     //let latestsegment = getLatestHLSSement(streamPath);
     //  console.log("getlatest")
+    let streamPath = recvVariables["stream_files_path"];
+    let segmentBufferN  = recvVariables["segment_buf_N"];
+    assert(recvVariables["segment_buf_N"] != null);
     if (!debugPaused)
         fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
             if (err) {
@@ -610,24 +673,53 @@ function getLatestHLSSegmentF() {
                 const number = partial[0];
                 latestSSegment = parseInt(number, 10);
                 let d = latestSSegment - latestCSegment;
-                console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
-                if (d > config.main.segmentBufferN) {
-                    player.getProperty("pause")
-                        .then((res) => {
-                            if (!res) {
-                                console.log("---> pausing delta <--- \n")
-                                player.pause();
-                            }
-                        }).catch((e) => { console.log(e) });
+                //console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
+                if (d > segmentBufferN) {
+
+                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
+                        .then(res => {
+                            try {
+                                let data = JSON.parse(res.data);
+                                if (!data) {
+                                    console.log("---> pausing delta <--- \n")
+                                    myWebSocket.sendWithResponse({
+                                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "yes"]
+                                    }).then(resMsg => { })
+                                }
+                            } catch (error) { console.log("error ", error);  }
+                        
+                        })
+                    // player.getProperty("pause")
+                    //     .then((res) => {
+                    //         if (!res) {
+                    //             console.log("---> pausing delta <--- \n")
+                    //             player.pause();
+                    //         }
+                    //     }).catch((e) => { console.log(e) });
+
                 }
                 else {
-                    player.getProperty("pause")
-                        .then((res) => {
-                            if (res) {
-                                console.log("---> resuming delta <--- \n")
-                                player.resume();
-                            }
-                        }).catch((e) => { console.log(e) });
+                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
+                        .then(res => {
+                            try {
+                                let data = JSON.parse(res.data);
+                                if (data) {
+                                    console.log("---> resuming delta <--- \n")
+                                    myWebSocket.sendWithResponse({
+                                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                                    }).then(resMsg => {   })
+                                }
+                            } catch (error) {   console.log("error ", error);   }
+
+                        })
+                    // player.getProperty("pause")
+                    //     .then((res) => {
+                    //         if (res) {
+                    //             console.log("---> resuming delta <--- \n")
+                    //             player.resume();
+                    //         }
+                    //     }).catch((e) => { console.log(e) });
+
                 }
             }
         });
@@ -662,41 +754,47 @@ app.get('/clientjs', (req, res) => {
 app.get('/files', (req, res) => {
     //config = readINI(configFile);
     const subfolder = req.query.subfolder || ''; // Get subfolder path from query parameter
-    const directoryPath2 = path.join(recvVariables["network_folder"], subfolder);
+    const netfolder = recvVariables["network_folder"];
+    if (netfolder) {
+        const directoryPath2 = path.join(netfolder, subfolder);
 
-    fs.readdir(directoryPath2, (err, files) => {
-        if (err) {
-            console.error('Error reading directory:', err);
-            res.status(500).send('Internal Server Error');
-            return;
-        }
+        fs.readdir(directoryPath2, (err, files) => {
+            if (err) {
+                console.error('Error reading directory:', err);
+                res.status(500).send('Internal Server Error');
+                return;
+            }
 
-        const filesWithInfo = [];
-        let count = 0;
+            const filesWithInfo = [];
+            let count = 0;
 
-        files.forEach(file => {
-            const filePath = path.join(directoryPath2, file);
-            fs.stat(filePath, (err, stats) => {
-                if (err) {
-                    console.error('Error getting file stats:', err);
-                    // res.status(500).send('Internal Server Error');
-                    // return;
-                } else {
+            files.forEach(file => {
+                const filePath = path.join(directoryPath2, file);
+                fs.stat(filePath, (err, stats) => {
+                    if (err) {
+                        //console.error('Error getting file stats:', err);
+                        // res.status(500).send('Internal Server Error');
+                        // return;
+                    } else {
 
-                    const fileInfo = {
-                        name: file,
-                        type: stats.isDirectory() ? 'folder' : 'file',
-                        absPath: path.join(subfolder, file)
-                    };
-                    filesWithInfo.push(fileInfo);
-                }
-                count++;
-                if (count === files.length) {
-                    res.json(filesWithInfo);
-                }
+                        const fileInfo = {
+                            name: file,
+                            type: stats.isDirectory() ? 'folder' : 'file',
+                            absPath: path.join(subfolder, file)
+                        };
+                        filesWithInfo.push(fileInfo);
+                    }
+                    count++;
+                    if (count === files.length) {
+                        res.json(filesWithInfo);
+                    }
+                });
             });
         });
-    });
+    }
+    else
+        res.json({error: "null network folder"});
+
 });
 
 function checkFile(filePath, callback) {
@@ -720,7 +818,8 @@ app.get('/mpv-play-file', (req, res) => {
     const file = req.query.file || ''; // Get subfolder path from query parameter
     const useTCP = req.query.useTCP == "true" // Get subfolder path from query parameter
     let streamPath = recvVariables["stream_files_path"];
-
+    latestSSegment = 0;
+    latestCSegment = 0;
     const file_path = path.join(recvVariables["network_folder"], file);
     console.log('\n ---> Requested file:', file_path, " ; useTCP ", useTCP, " <---\n");
     if (fs.existsSync(file_path)) {
@@ -733,8 +832,12 @@ app.get('/mpv-play-file', (req, res) => {
                     console.log(`File ${streamPath + "str000001.ts"} exists.`);
                     //res.json({ trackList: null, message: ".ts files found  " });
                     checkFile(streamPath + "\\out.m3u8", () => {
-                        console.log(`File ${streamPath + "out.m3u8"} exists.`);
-                        const requestId = myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "track-list"  })
+                        console.log(`File ${streamPath + "\\out.m3u8"} exists.`);
+                        if (latestSSegmentInt)
+                            clearInterval(latestSSegmentInt);
+                        latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+
+                        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "track-list"  })
                             .then(tr => {
                                 let data = JSON.parse(tr.data);
                                 res.json({ trackList: data, message: ".ts files found  " });
@@ -823,23 +926,41 @@ app.post('/mpv-track-req', async (req, res) => {
         console.log("Cycle subtitle");
         const postData = req.body;
         console.log(req.body)
-        if (player) {
-            if (req.body.reqtype == "cycle") {
-                player.command("cycle", req.body.which).then(sub => {
-                    player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
-                        res.json({ reqRes: mpvres });
-                    }).catch(
-                        (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
-                }).catch((error) => { console.log(error); res.json({ reqRes: { title: "Cycle failed" } }); })
-            } else {
-                player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
-                    res.json({ reqRes: mpvres });
-                }).catch(
-                    (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
-            }
 
-        } else
-            res.json({ reqRes: { title: "No file playing" } });
+        //    if (player) {
+        if (req.body.reqtype == "cycle") {
+
+            myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'post_mpv_command', command: ["cycle", req.body.which] })
+                .then(mpvres => {
+                    let data = JSON.parse(mpvres.data);
+                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: `current-tracks/${req.body.which}` })
+                        .then(mpvres => {
+                            res.json({ reqRes: JSON.parse(  mpvres.data) });
+                        })
+                })
+
+            // player.command("cycle", req.body.which).then(sub => {
+            //     player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
+            //         res.json({ reqRes: mpvres });
+            //     }).catch(
+            //         (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
+            // }).catch((error) => { console.log(error); res.json({ reqRes: { title: "Cycle failed" } }); })
+
+        } else {
+            myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: `current-tracks/${req.body.which}` })
+                .then(mpvres => {
+                    
+                    res.json({ reqRes: JSON.parse(  mpvres.data) });
+                })
+
+            // player.getProperty(`current-tracks/${req.body.which}`).then(mpvres => {
+            //     res.json({ reqRes: mpvres });
+            // }).catch(
+            //     (error) => { console.log(error); res.json({ reqRes: { title: "None" } }); })
+        }
+
+        // } else
+        //     res.json({ reqRes: { title: "No file playing" } });
 
 
     } catch (error) {
@@ -849,20 +970,45 @@ app.post('/mpv-track-req', async (req, res) => {
 });
 
 app.post('/mpv-seek', (req, res) => {
-    const sliderValue = req.body.sliderValue;
-    //clientPos = 0;
-    player.getDuration()
-        .then((duration) => {
 
+    const sliderValue = req.body.sliderValue;
+
+    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
+        .then(durationMsg => {
+            duration = parseFloat(durationMsg.data);
             let newPos = (sliderValue / 1000) * duration;
             console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
-            player.seek(newPos, 'absolute');
-            //    if (usetimerPauser) timedPaused();
-        })
-        .catch((error) => { console.log(error); })
 
-    res.json({ message: 'Slider value received successfully.' });
+            myWebSocket.sendWithResponse({
+                type: "perform_operation",
+                operation_type: 'post_mpv_command',
+                command: ["set_property", "playback-time", newPos]
+            })
+                .then(resMsg => {
+                    //let data = JSON.parse(message.data);
+                    res.json({ message: { 'Seek result': resMsg } });
+                    myWebSocket.sendWithResponse({
+                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                    }).then(resMsg => { })
+                })
+
+        })
+
+
+    // //clientPos = 0;
+    // player.getDuration()
+    //     .then((duration) => {
+
+    //         let newPos = (sliderValue / 1000) * duration;
+    //         console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
+    //         player.seek(newPos, 'absolute');
+    //         //    if (usetimerPauser) timedPaused();
+    //     })
+    //     .catch((error) => { console.log(error); })
+
+    // res.json({ message: 'Slider value received successfully.' });
 });
+
 
 app.get('/test1', (req, res) => {
     res.send({ number: 123 });
@@ -871,52 +1017,86 @@ app.get('/test1', (req, res) => {
 
 app.post('/mpv-get-perc-pos', (req, res) => {
 
-    const clientPlaybackD = req.body.clientPlaybackD;
-    if (player)
-        player.getDuration()
-            .then((duration) => {
-                player.getProperty('playback-time').then(pos => {
-                    let sliderPos = (pos / duration) * 1000;
-                    //let delta = clientPlaybackD;
-                    //console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                    console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                    //if (clientPos)
-                    // if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
-                    //     player.getProperty("pause")
-                    //         .then((res) => {
-                    //             if (!res) {
-                    //                 console.log("---> pausing delta <--- \n")
-                    //                 player.pause();
-                    //             }
-                    //         }).catch((e) => { console.log(e) });
-                    // }
-                    // else {
-                    //     player.getProperty("pause")
-                    //         .then((res) => {
-                    //             if (res) {
-                    //                 console.log("---> resuming delta <--- \n")
-                    //                 player.resume();
-                    //             }
-                    //         }).catch((e) => { console.log(e) });
-                    // }
+    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
+        .then(durationMsg => {
+            if (durationMsg) {
+                if (durationMsg.success == false) {
+                    res.send({ number: -1 });
+                } else
+                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "playback-time" })
+                        .then(posMsg => {
+                            if (posMsg != null) {
+                                //let data = JSON.parse(message.data);
+                                duration = parseFloat(durationMsg.data);
+                                pos = parseFloat(posMsg.data);
+                                let sliderPos = (pos / duration) * 1000;
+                                console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                                res.send({ number: sliderPos });
+                            } else res.send({ number: -1 });
+                        })
+            } else res.send({ number: 0 });
+        })
 
-                    res.send({ number: sliderPos });
-                }).catch((error) => { console.log(error); })
-
-            }).catch((error) => { console.log(error); })
+// const clientPlaybackD = req.body.clientPlaybackD;
+    // if (player)
+    //     player.getDuration()
+    //         .then((duration) => {
+    //             player.getProperty('playback-time').then(pos => {
+    //                 let sliderPos = (pos / duration) * 1000;
+    //                 //let delta = clientPlaybackD;
+    //                 //console.log('Server pos', pos.toFixed(2), " delta  ", delta.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+    //                 console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+    //                 //if (clientPos)
+    //                 // if (delta > config.main.segmentTime * config.main.pausePlayTimeMult) {
+    //                 //     player.getProperty("pause")
+    //                 //         .then((res) => {
+    //                 //             if (!res) {
+    //                 //                 console.log("---> pausing delta <--- \n")
+    //                 //                 player.pause();
+    //                 //             }
+    //                 //         }).catch((e) => { console.log(e) });
+    //                 // }
+    //                 // else {
+    //                 //     player.getProperty("pause")
+    //                 //         .then((res) => {
+    //                 //             if (res) {
+    //                 //                 console.log("---> resuming delta <--- \n")
+    //                 //                 player.resume();
+    //                 //             }
+    //                 //         }).catch((e) => { console.log(e) });
+    //                 // }
+    //                 res.send({ number: sliderPos });
+    //             }).catch((error) => { console.log(error); })
+    //         }).catch((error) => { console.log(error); })
+    
 });
 
 app.get('/mpv-is-player', (req, res) => {
-    if (player == null)
-        res.send({ number: 0 });
-    else {
-        player.getDuration()
-            .then((duration) => {
-                player.getProperty('playback-time').then(pos => {
-                    res.send({ number: 1 });
-                }).catch((error) => { res.send({ number: 0 }); })
-            }).catch((error) => { res.send({ number: 0 }) })
-    }
+        //myWebSocket.socket.send(JSON.stringify({ type: "perform_operation", operation_type: 'open_file', file_path: file_path }));
+
+    const requestId =  myWebSocket.sendWithResponse({ type: "get_player_status" })
+        .then(messageData  => {
+            if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING")
+                res.send({ number: 1 });
+            else
+                res.send({ number: 0 });
+
+            console.log(`mpv-is-player: ${messageData}`);
+        })
+        .catch(err => {
+            console.log(`Error checking mpv-is-player: ${err}`);
+        });
+
+    // if (player == null)
+    //     res.send({ number: 0 });
+    // else {
+    //     player.getDuration()
+    //         .then((duration) => {
+    //             player.getProperty('playback-time').then(pos => {
+    //                 res.send({ number: 1 });
+    //             }).catch((error) => { res.send({ number: 0 }); })
+    //         }).catch((error) => { res.send({ number: 0 }) })
+    // }
 });
 
 // app.use(express.static('videos'));
@@ -982,7 +1162,7 @@ new hls(server, {
                 const regex = /(\d+)/;
                 const numberS = req.url.match(regex)[0];
                 const number = parseInt(numberS, 10);
-                console.log("numer ", number, " latestCSegment ", latestCSegment, "numberS", numberS);
+                //console.log("numer ", number, " latestCSegment ", latestCSegment, "numberS", numberS);
                 if (number > latestCSegment) {
                     latestCSegment = Math.min(latestSSegment, number);
                     last = true;
