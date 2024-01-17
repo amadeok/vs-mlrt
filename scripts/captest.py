@@ -1,5 +1,12 @@
 import os
+import time
+import keyboard
 
+while True:
+    print("pressed")
+    keyboard.press_and_release('space')
+    time.sleep(10)
+    
 import yt_dlp
 
 def get_resolution(video_url, stream_index=0):
@@ -26,13 +33,7 @@ print(f'Resolution: {resolution}')
 
 
 
-import time
-import keyboard
 
-while True:
-    print("pressed")
-    keyboard.press_and_release('space')
-    time.sleep(10)
 
 
 v = 18446744073709551615

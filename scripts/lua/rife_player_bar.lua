@@ -134,7 +134,7 @@ function monitor_partial()
     for key, value in pairs(luaTable) do
         print(key, value)
     end
-    if luaTable["type"] == "data" and luaTable["resposeOf"] == "get_duration_and_curtime" then
+    if luaTable["type"] == "data"  and luaTable["resposeOf"] == "get_duration_and_curtime" then
         print("Received data:")
         local browserCurTime = luaTable["data"]["video_curTime"]
         local browserDuration = luaTable["data"]["video_duration"]

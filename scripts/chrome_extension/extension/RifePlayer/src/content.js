@@ -22,6 +22,47 @@
 //     console.log("Page reloaded!");
 //   }
 // });
+//var elements = document.querySelectorAll('div');
+var elements = document.querySelectorAll( '*' );
+
+// Add click event listener to each element
+// elements.forEach(function(element) {
+//   element.addEventListener('click', function() {
+//     console.log('Clicked on:', element);
+//     // You can do additional actions based on the clicked element here
+//   });
+// });
+// console.log("---------- >effect")
+// setInterval(() => {
+//   const videoElement = document.querySelector('video');
+
+//   let name = "controls__footer__progressWrapper display-flex";
+//   let seekBarA = document.getElementsByClassName(name);
+//   let seekBar = seekBarA[0];
+//   let desiredPercentage = 50;
+//   const rect = seekBar.getBoundingClientRect();
+//   const mouseX = rect.left + (desiredPercentage / 100) * rect.width;
+//   const mouseY = rect.top + rect.height / 2;
+//   let wrap = document.getElementById("webAppRoot");
+//   console.log("effect", seekBar, " | ", mouseX, mouseY, wrap)
+
+//  // elements.forEach(function(element) {
+//    // element.addEventListener('click', function() {
+//       const mousedownEvent = new MouseEvent('mousedown', { bubbles: true, clientX: mouseX, clientY: mouseY });
+
+//       videoElement.dispatchEvent(mousedownEvent);
+    
+//       const mouseupEvent = new MouseEvent('mouseup', { bubbles: true, clientX: mouseX, clientY: mouseY });
+    
+//       videoElement.dispatchEvent(mouseupEvent);
+
+//       var keyEvent = new KeyboardEvent("keydown", { bubbles: true, keyCode:  32 });
+//       videoElement.dispatchEvent(keyEvent);
+//     //});
+//  // });
+
+// }, 2000);
+
 
 
 if (!window.hasScriptInjected) {
@@ -189,18 +230,26 @@ if (!window.hasScriptInjected) {
 
     chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       console.log("request", request)
-      console.log("Op: ", request.action.operation_type, " | det2 ", request.action.operation_details)
       var videoElement = document.querySelector('video');
+      console.log("Op: ", request.action.operation_type, " | det2 ", request.action.operation_details, " | ")
 
       if (request.action.operation_type === 'video_pause') {
+        console.log("video_pause | mpv paused " ,request.action.operation_details, " | video elem paused", videoElement.paused )
         checkNetflixPlayBtn();
-        if (!request.action.operation_details) {
-          if (videoElement.paused)
+        let mpvPaused = JSON.parse(request.action.operation_details);
+        if (!mpvPaused) {
+          console.log("----> mpv not paused")
+          if (videoElement.paused){
             videoElement.play();
+            console.log("----- > videoElement paused")
+          }
           sendResponse({ operation_result: !videoElement.paused });
         } else {
-          if (!videoElement.paused)
+          console.log("----> mpv paused")
+          if (!videoElement.paused){
+            console.log("----> videoElement not  paused")
             videoElement.pause();
+          }
           sendResponse({ operation_result: videoElement.paused });
         }
       }

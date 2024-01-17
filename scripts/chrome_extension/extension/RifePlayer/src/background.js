@@ -205,9 +205,13 @@ class WebSocketClient {
     console.log('Connected to server');
     this.socket.send(JSON.stringify({ type: "id_handshake", client_type: 'browser_extension'}));
   }
-
+ 
   onMessage(event) {
-    const message = JSON.parse(event.data);
+    const  body = JSON.parse(event.data);
+    let message =body.id ?  body.message  : body;
+    let id = body.id
+    console.log('body:', body, body.id);
+
     if (message.type === 'perform_operation') {
       console.log('Performing operation:', message.operation_type);
       //console.log("cap win title: ", message.cap_win_title, "|", message.cap_win_rect);
@@ -223,14 +227,16 @@ class WebSocketClient {
           }, result => {
             if (chrome.runtime.lastError) {
               console.log("ERROR", chrome.runtime.lastError);
-              myWebSocket.socket.send(JSON.stringify({ type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  }));
-              } else {// console.log('Script execution result:', result);
+              let obj = { type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  };
+              myWebSocket.socket.send(JSON.stringify({id: id, message: obj }));
+            } else {// console.log('Script execution result:', result);
               chrome.tabs.sendMessage(selectedTab.id, { action: { operation_type:message.operation_type, operation_details: message.operation_details } },
                 function (response) {
                   if (chrome.runtime.lastError) {
                      console.log("ERROR", chrome.runtime.lastError);
-                     myWebSocket.socket.send(JSON.stringify({ type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  }));
-                     }
+                     let obj = { type: "data", data: null, resposeOf: message.operation_type, activeTab: selectedTab.title, error: chrome.runtime.lastError  };
+                     myWebSocket.socket.send(JSON.stringify({id: id, message: obj }));
+                    }
                   else { 
                     console.log('Response received:', response);
                     if (response.data){
@@ -238,7 +244,7 @@ class WebSocketClient {
                         console.log("Error during operation: ", response.error)
                       let obj = { type: "data", data: response.data, resposeOf: message.operation_type, activeTab: selectedTab.title,  }
                       console.log('sending response to server:',response.data, " | ", obj );
-                      myWebSocket.socket.send(JSON.stringify(obj));
+                      myWebSocket.socket.send(JSON.stringify({id: id, message: obj }));
                     }
                   }
                 });

@@ -113,8 +113,8 @@ function generateUniqueId() {
 
 function waitUntilEmpty(dictionary, interval, callback) {
     const checkEmpty = () => {
-        console.log("Waiting until empty");
-        if (Object.keys(dictionary).size === 0) {
+        console.log("Waiting until empty", dictionary.size);
+        if (dictionary.size === 0) {
             clearInterval(intervalId);
             callback();
         }
@@ -148,6 +148,10 @@ class WebSocketClient {
     }
     createSocket() {
         try {
+            for (let [key, value] of this.messageCallbacks.entries())  {
+                console.log("ksetting key ", key, value);
+                 this.messageCallbacks.set(key, {delete: "yes"} );
+            }
             console.log("Creating new websocket:  ", this.HOST);
             this.socket = new WebSocket(this.HOST);
             this.socket.addEventListener('open', this.onOpen.bind(this));
@@ -175,15 +179,25 @@ class WebSocketClient {
                                 //console.log(key + ": " + variablesObject[key]);
                             }
                         }
+                    }else if (messageData.type == "data"  && messageData.resposeOf == "get_duration_and_curtime"){
+                        let browserCurTime = messageData.data.video_curTime
+                        let browserDuration = messageData.data.video_duration
+                        console.log("Received data get_duration_and_curtime ", browserCurTime, browserDuration)
+
                     }
+
+
                 }
             });
+            if (latestSSegmentInt)
+                clearInterval(latestSSegmentInt);
+            latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
         } catch (error) {
             console.log("Error creating websocket: ", error);
         }
 
-        
-    }w
+
+    } 
     waitForValueToBecomeOne(key, this_) {
         return new Promise((resolve) => {
           function checkValue() {
@@ -230,7 +244,7 @@ class WebSocketClient {
             this.messageCallbacks.set(requestId, null);
             //let requestId = this.counter;
             this.counter +=1;
-            this.messageCallbacks[requestId] = null;
+            //this.messageCallbacks[requestId] = null;
             const data = { id: requestId, message: message };
             const jsonData = JSON.stringify(data);
             if (this.socket.readyState !== WebSocket.OPEN)
@@ -291,7 +305,8 @@ class WebSocketClient {
     }
 
     onClose(event) {
-         for (let [key, value] of this.messageCallbacks.entries())      this.messageCallbacks.set(key, {delete: "yes"} );
+         for (let [key, value] of this.messageCallbacks.entries())  
+             this.messageCallbacks.set(key, {delete: "yes"} );
         
         //for (n = 0; n < this.counter+10; n++)  this.messageCallbacks[n] = null;
 
@@ -673,21 +688,25 @@ function getLatestHLSSegmentF() {
                 const number = partial[0];
                 latestSSegment = parseInt(number, 10);
                 let d = latestSSegment - latestCSegment;
-                //console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
+                console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
                 if (d > segmentBufferN) {
 
                     myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
                         .then(res => {
                             try {
-                                let data = JSON.parse(res.data);
-                                if (!data) {
-                                    console.log("---> pausing delta <--- \n")
-                                    myWebSocket.sendWithResponse({
-                                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "yes"]
-                                    }).then(resMsg => { })
-                                }
-                            } catch (error) { console.log("error ", error);  }
-                        
+                                if (res.success) {
+                                    let data = JSON.parse(res.data);
+                                    if (!data) {
+                                        console.log("---> pausing delta <--- \n")
+                                        myWebSocket.sendWithResponse({
+                                            //type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "yes"]
+                                            type: "perform_operation", operation_type: 'pause_player', value: "yes"
+
+                                        }).then(resMsg => { })
+                                    }
+                                }else { console.log("error ", res.data);  }
+                            } catch (error) { console.log("error ", error); }
+
                         })
                     // player.getProperty("pause")
                     //     .then((res) => {
@@ -702,14 +721,17 @@ function getLatestHLSSegmentF() {
                     myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
                         .then(res => {
                             try {
-                                let data = JSON.parse(res.data);
-                                if (data) {
-                                    console.log("---> resuming delta <--- \n")
-                                    myWebSocket.sendWithResponse({
-                                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
-                                    }).then(resMsg => {   })
-                                }
-                            } catch (error) {   console.log("error ", error);   }
+                                if (res.success) {
+                                    let data = JSON.parse(res.data);
+                                    if (data) {
+                                        console.log("---> resuming delta <--- \n")
+                                        myWebSocket.sendWithResponse({
+                                            //  type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                                            type: "perform_operation", operation_type: 'pause_player', value: "no"
+                                        }).then(resMsg => { })
+                                    }
+                                }else { console.log("error ", res.data);  }
+                            } catch (error) { console.log("error ", error); }
 
                         })
                     // player.getProperty("pause")
@@ -972,27 +994,52 @@ app.post('/mpv-track-req', async (req, res) => {
 app.post('/mpv-seek', (req, res) => {
 
     const sliderValue = req.body.sliderValue;
+    if (1) {
+        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'player_seek', sliderValue: sliderValue })
+            .then(response => {
+                console.log("response", response)
+                res.send(response)
+                    //              duration = parseFloat(durationMsg.data);
+                //                let newPos = (sliderValue / 1000) * duration;
 
-    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
-        .then(durationMsg => {
-            duration = parseFloat(durationMsg.data);
-            let newPos = (sliderValue / 1000) * duration;
-            console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
+                // console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
 
-            myWebSocket.sendWithResponse({
-                type: "perform_operation",
-                operation_type: 'post_mpv_command',
-                command: ["set_property", "playback-time", newPos]
+                // myWebSocket.sendWithResponse({
+                //     type: "perform_operation",
+                //     operation_type: 'post_mpv_command',
+                //     command: ["set_property", "playback-time", newPos]
+                // })
+                //     .then(resMsg => {
+                //         //let data = JSON.parse(message.data);
+                //         res.json({ message: { 'Seek result': resMsg } });
+                //         myWebSocket.sendWithResponse({
+                //             type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                //         }).then(resMsg => { })
+                //     })
+
             })
-                .then(resMsg => {
-                    //let data = JSON.parse(message.data);
-                    res.json({ message: { 'Seek result': resMsg } });
-                    myWebSocket.sendWithResponse({
-                        type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
-                    }).then(resMsg => { })
-                })
+    } else
 
-        })
+        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
+            .then(durationMsg => {
+                duration = parseFloat(durationMsg.data);
+                let newPos = (sliderValue / 1000) * duration;
+                console.log('Slider Value:', sliderValue, " Seek pos: ", newPos, " Dur: ", duration);
+
+                myWebSocket.sendWithResponse({
+                    type: "perform_operation",
+                    operation_type: 'post_mpv_command',
+                    command: ["set_property", "playback-time", newPos]
+                })
+                    .then(resMsg => {
+                        //let data = JSON.parse(message.data);
+                        res.json({ message: { 'Seek result': resMsg } });
+                        myWebSocket.sendWithResponse({
+                            type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                        }).then(resMsg => { })
+                    })
+
+            })
 
 
     // //clientPos = 0;
@@ -1017,25 +1064,41 @@ app.get('/test1', (req, res) => {
 
 app.post('/mpv-get-perc-pos', (req, res) => {
 
-    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
-        .then(durationMsg => {
-            if (durationMsg) {
-                if (durationMsg.success == false) {
-                    res.send({ number: -1 });
-                } else
-                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "playback-time" })
-                        .then(posMsg => {
-                            if (posMsg != null) {
-                                //let data = JSON.parse(message.data);
-                                duration = parseFloat(durationMsg.data);
-                                pos = parseFloat(posMsg.data);
-                                let sliderPos = (pos / duration) * 1000;
-                                console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                                res.send({ number: sliderPos });
-                            } else res.send({ number: -1 });
-                        })
-            } else res.send({ number: 0 });
-        })
+    if (1) {
+        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_duration_and_pos' })
+            .then(ret => {
+                if (ret.success){
+                   // console.log("res", ret)
+                    let msg = ret.message;
+                    let  pos =  parseFloat(msg.data.video_curTime)
+                    let duration = parseFloat(msg.data.video_duration)
+                    let sliderPos = (pos / duration) * 1000;
+                    console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                    res.send({ number: sliderPos });
+                }
+                else res.send({ number: -1 })
+            })
+    }
+    else
+        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
+            .then(durationMsg => {
+                if (durationMsg) {
+                    if (durationMsg.success == false) {
+                        res.send({ number: -1 });
+                    } else
+                        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "playback-time" })
+                            .then(posMsg => {
+                                if (posMsg != null) {
+                                    //let data = JSON.parse(message.data);
+                                    duration = parseFloat(durationMsg.data);
+                                    pos = parseFloat(posMsg.data);
+                                    let sliderPos = (pos / duration) * 1000;
+                                    console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
+                                    res.send({ number: sliderPos });
+                                } else res.send({ number: -1 });
+                            })
+                } else res.send({ number: 0 });
+            })
 
 // const clientPlaybackD = req.body.clientPlaybackD;
     // if (player)
@@ -1072,31 +1135,37 @@ app.post('/mpv-get-perc-pos', (req, res) => {
 });
 
 app.get('/mpv-is-player', (req, res) => {
-        //myWebSocket.socket.send(JSON.stringify({ type: "perform_operation", operation_type: 'open_file', file_path: file_path }));
+    //myWebSocket.socket.send(JSON.stringify({ type: "perform_operation", operation_type: 'open_file', file_path: file_path }));
+    if (myWebSocket.socket.readyState === WebSocket.OPEN) {
 
-    const requestId =  myWebSocket.sendWithResponse({ type: "get_player_status" })
-        .then(messageData  => {
-            if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING")
-                res.send({ number: 1 });
-            else
-                res.send({ number: 0 });
+        myWebSocket.sendWithResponse({ type: "get_player_status" })
+            .then(messageData => {
+                if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING")
+                    res.send({ number: 1 });
+                else
+                    res.send({ number: 0 });
 
-            console.log(`mpv-is-player: ${messageData}`);
-        })
-        .catch(err => {
-            console.log(`Error checking mpv-is-player: ${err}`);
-        });
+                console.log(`mpv-is-player: ${messageData}`);
+            })
+            .catch(err => {
+                console.log(`Error checking mpv-is-player: ${err}`);
+                res.send({ number: 0, message: "error", error: err });
+            });
+    }else{
+        res.send({ number: 0, message: "No connection to host player", error: null });
 
-    // if (player == null)
-    //     res.send({ number: 0 });
-    // else {
-    //     player.getDuration()
-    //         .then((duration) => {
-    //             player.getProperty('playback-time').then(pos => {
-    //                 res.send({ number: 1 });
-    //             }).catch((error) => { res.send({ number: 0 }); })
-    //         }).catch((error) => { res.send({ number: 0 }) })
-    // }
+    }
+
+// if (player == null)
+//     res.send({ number: 0 });
+// else {
+//     player.getDuration()
+//         .then((duration) => {
+//             player.getProperty('playback-time').then(pos => {
+//                 res.send({ number: 1 });
+//             }).catch((error) => { res.send({ number: 0 }); })
+//         }).catch((error) => { res.send({ number: 0 }) })
+// }
 });
 
 // app.use(express.static('videos'));

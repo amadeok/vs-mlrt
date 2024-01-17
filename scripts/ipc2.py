@@ -157,7 +157,7 @@ command = '{ "command": ["get_property", "test_prop"]}\n'
 command =  '{ "command": ["get_property", "script-opts"] }\n' 
 command =  '{ "command": ["quit"] }\n' 
 command =  '{ "command": ["get_property", "height"] }\n' 
-command =  '{ "command": ["set_property", "playback-time", "0"] }\n' 
+command =  '{ "command": ["set_property", "playback-time", "2000"] }\n' 
 
 b = bytes(command, 'utf-8')
 ret = win32file.WriteFile(con.pipe_handle, b )
