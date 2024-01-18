@@ -23,7 +23,7 @@
 //   }
 // });
 //var elements = document.querySelectorAll('div');
-var elements = document.querySelectorAll( '*' );
+//var elements = document.querySelectorAll( '*' );
 
 // Add click event listener to each element
 // elements.forEach(function(element) {
@@ -227,7 +227,30 @@ if (!window.hasScriptInjected) {
       }
     }
 
-
+    function timeStringToSeconds(timeString) {
+      var timeComponents = timeString.split(':').map(Number);
+      var totalSeconds;
+    
+      if (timeComponents.length === 3) {
+        totalSeconds = timeComponents[0] * 3600 + timeComponents[1] * 60 + timeComponents[2];
+      } else if (timeComponents.length === 2) {
+        totalSeconds = timeComponents[0] * 60 + timeComponents[1];
+      } else {
+        console.error('Invalid time format');
+        return 0;
+      }
+    
+      return totalSeconds;
+    }
+    function getDisneyPlusDuration() {
+      const timeRemElem = document.querySelector('[class*="time-remaining-label"]');
+      let remSecs = timeStringToSeconds(timeRemElem.innerText);
+      return videoElement.currentTime + remSecs;
+    }
+    var simulateKeyPress = function(keyCode, element) {
+      var event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: keyCode });
+      element.dispatchEvent(event);
+  };
     chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       console.log("request", request)
       var videoElement = document.querySelector('video');
@@ -255,21 +278,82 @@ if (!window.hasScriptInjected) {
       }
       else if (request.action.operation_type === 'seek') {
         // var videoElement = document.querySelector('video');
-        if (document.title.includes("Netflix")) {
+        if (document.title.includes("Netflix")) { 
           seekByClick(request.action.operation_details)
             .then(seekTime => {
               checkPlaybackTime(videoElement, seekTime, request, sendResponse, 20);
-            }).catch(error => { console.log('Error:', error); sendResponse({ operation_result: false, error: error }); });
+            }).catch(error => { console.log('Error:', error); 
+           });
+        }
+        else if (document.title.includes("Disney+")) {
+          //if (typeof bSeeking === 'undefined' || !bSeeking || 1) { bSeeking = true;
+           
+            let duration = getDisneyPlusDuration();
+            let seekTime = (request.action.operation_details / 100) * duration;
+            console.log("loop", videoElement.currentTime, seekTime, request.action.operation_details)
+            let ctGtSeekTime = () => { return  videoElement.currentTime > seekTime; }
+            let ctLessSeekTime = () => { return  videoElement.currentTime < seekTime; }
+            let fun = videoElement.currentTime > seekTime ? ctGtSeekTime : ctLessSeekTime;
+            let key =  videoElement.currentTime > seekTime ? 37 : 39;
+            //var currentDate = new Date();
+            var startT = new Date().getTime();
+            
+            
+              if (typeof intervalId !== 'undefined')
+                clearInterval(intervalId);
+              var sleepTime =  10; //Math.abs(videoElement.currentTime - seekTime) < 300 ?  50 :
+
+              function task(timeout){
+                if ( fun() && !timeout) {
+                  let duration = getDisneyPlusDuration();
+                  //let seekTime = (request.action.operation_details / 100) * duration;
+                  console.log("loop", sleepTime, " ct: ", videoElement.currentTime.toFixed(2),  " dur: ", duration.toFixed(2), "seekTime:", seekTime.toFixed(2), "perc: ", request.action.operation_details, (Math.abs(videoElement.currentTime - seekTime).toFixed(2)))
+                  simulateKeyPress(key, videoElement); // Left arrow key
+                } else  {
+                  console.log("seek end" +  (timeout ?  " timeout" : ""))
+                  clearInterval(intervalId);
+                  var keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, keyCode: key });
+                  videoElement.dispatchEvent(keyupEvent);
+                  sendResponse({ operation_result: timeout, error: timeout ? "error" : null }); 
+
+                }
+              }
+
+              intervalId = setInterval(function () {
+                var timeout = new Date().getTime() - startT > 15*1000;
+               // var sleepTime = Math.abs(videoElement.currentTime - seekTime) < 300;
+               var d = Math.abs(videoElement.currentTime - seekTime);
+                if (d < 400){
+                  clearInterval(intervalId);
+                  console.log("seek int cleared")
+                  sleepTime = 50;//d < 300 ?  50 : 10;
+                  intervalId = setInterval(function () {
+                    var timeout = new Date().getTime() - startT > 15*1000;
+                    task(timeout);
+                  }, sleepTime);
+                } 
+                else 
+                  task(timeout);
+              }, sleepTime); // Adjust the interval as needed
+            
+        //  }else console.log("Already seeking");
         }
         else {
           let seekTime = (request.action.operation_details / 100) * videoElement.duration;
           videoElement.currentTime = seekTime;
           checkPlaybackTime(videoElement, seekTime, request, sendResponse, 3);
+          sendResponse({ operation_result: true, error:null }); 
+
         }
       }
       else if (request.action.operation_type === 'get_duration_and_curtime') {
-        if (videoElement)
-          sendResponse({ operation_result: true, data: { video_duration: videoElement.duration, video_curTime: videoElement.currentTime } });
+        if (videoElement){
+          let duration = videoElement.duration;
+          if (document.title.includes("Disney+")) 
+            duration = getDisneyPlusDuration();
+         // console.log("dur", duration)
+          sendResponse({ operation_result: true, data: { video_duration: duration, video_curTime: videoElement.currentTime } });
+        }
         else
           sendResponse({ operation_result: false, data: { video_duration: null, video_curTime: null }, error: "Video element not found" });
       }

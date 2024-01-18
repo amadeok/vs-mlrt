@@ -6,7 +6,10 @@ const toggleButton = document.getElementById('toggle-button');
 var currentSegmentStartTime = 0;
 let hls = null;
 let playInterval = null;
-
+let mirroringMode = null;
+let playSessionId = null;
+let playerStatus = null;
+let first = false;
 function getParentDirectory(path) {
     const directories = path.split('/');
     directories.pop();
@@ -212,8 +215,11 @@ function startHls() {
                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
                 data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR) {
                 if (data.response && data.response.code === 404) {
-                    // Handle 404 error here
                     console.log('Error: 404 Not Found callback');
+                    console.log('reloading page');
+                    setTimeout(() => {
+                        location.reload();  
+                    }, 5000);                                     
                 } else {
                     // Handle other HLS errors
                     console.log('Error: ' + data.details);
@@ -244,6 +250,9 @@ function startPlayEv() {
 
 let isTherePlayer;
 document.addEventListener('DOMContentLoaded', function () {
+    if (playInterval)
+            clearInterval(playInterval);
+    playInterval = setInterval(makeRequest, 4000);
 
     isPlayerRunning()
         .then(result => {
@@ -429,28 +438,49 @@ async function makeRequest() {
     try {
         //console.log("mreq ", bSeeking, hls.levels[hls.currentLevel] , hls.levels[hls.currentLevel].details)
         if (!bSeeking) {
-            if (hls.levels[hls.currentLevel] && hls.levels[hls.currentLevel].details) {
-                let frags = hls.levels[hls.currentLevel].details.fragments;
-                let last = frags[frags.length - 1];
-                let d = last.start - currentSegmentStartTime;
+           // if (hls.levels[hls.currentLevel] && hls.levels[hls.currentLevel].details) {
+                // let frags = hls.levels[hls.currentLevel].details.fragments;
+                // let last = frags[frags.length - 1];
+                // let d = last.start - currentSegmentStartTime;
                 const response = await fetch('/mpv-get-perc-pos', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ clientPlaybackD: d }),
+                    body: JSON.stringify({ clientPlaybackD: null }),
                 });
                 const data = await response.json();
-                if (data.number == -1){
-                    if (playInterval)
-                        clearInterval(playInterval);
+                let lastplaySessionId = localStorage.getItem('play_session_id');
+                localStorage.setItem('prev_play_session_id', lastplaySessionId);
+                localStorage.setItem('play_session_id', data.play_session_id);
+                playSessionId =  data.play_session_id;
+
+                let lastStatus = localStorage.getItem('play_status');
+                localStorage.setItem('prev_play_status', lastplaySessionId);
+                localStorage.setItem('play_status', data.status);
+                playerStatus =  data.status;
+                console.log("Status: ", data.status,   data);
+
+                if (data.status == "RUNNING") {
+                    console.log(" mirroring mode: ", data.mirroring_mode, " play session id", data.play_session_id);
+                    if ( lastplaySessionId != playSessionId) {
+                        alert("New play session");
+                        location.reload();
+                    }
+                }
+                else if (lastStatus != playerStatus){
                     videoElement.pause();
                     showFileBrowser();
                     alert("Player has stopped")
-
+                    console.log("Not running");
                 }
+
+                mirroringMode = data.mirroring_mode;
+                //playSessionId =  data.play_session_id;
+                //localStorage.setItem('play_session_id', data.play_session_id);
+
                 document.getElementById('seek-slider').value = data.number;
-            }
+           // }
         }
         else console.log("seeking, get perc pos aborted")
     } catch (error) {

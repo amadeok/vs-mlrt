@@ -107,20 +107,12 @@ let timerPauseTimeout = null;
 let clientPos = null;
 var recvVariables = {};
 
+
 function generateUniqueId() {
     return '_' + Math.random().toString(36).substr(2, 9);
 }
 
-function waitUntilEmpty(dictionary, interval, callback) {
-    const checkEmpty = () => {
-        console.log("Waiting until empty", dictionary.size);
-        if (dictionary.size === 0) {
-            clearInterval(intervalId);
-            callback();
-        }
-    };
-    const intervalId = setInterval(checkEmpty, interval);
-}
+
 
 class WebSocketClient {
     constructor(host) {
@@ -138,7 +130,7 @@ class WebSocketClient {
                 for (let [key, value] of this.messageCallbacks.entries())      this.messageCallbacks.set(key, {delete: "yes"} );
 
                 //for (let n = 0; n < this.counter+10; n++) this.messageCallbacks[n] = null;
-                waitUntilEmpty(this.messageCallbacks, 500, () => {
+                this.waitUntilEmpty(this.messageCallbacks,  1500, () => {
                     this.createSocket();
                 })
             }
@@ -146,12 +138,32 @@ class WebSocketClient {
         }, 10000);
 
     }
+
+    waitUntilEmpty(dictionary, interval, callback) {
+        const checkEmpty = () => {
+            this.emptyDict(); 
+            console.log("Waiting until empty", dictionary.size);
+             if (dictionary.size === 0) { 
+                clearInterval(intervalId );
+                callback();
+            }
+        };
+        const intervalId = setInterval(checkEmpty, interval);
+    }
+    emptyDict() {
+        for (let [key, value] of this.messageCallbacks.entries())  {
+            console.log("ksetting key ", key, value);
+             this.messageCallbacks.set(key, {delete: "yes"} );
+             this.messageCallbacks.delete(key);
+
+        }
+    }
     createSocket() {
         try {
             for (let [key, value] of this.messageCallbacks.entries())  {
                 console.log("ksetting key ", key, value);
                  this.messageCallbacks.set(key, {delete: "yes"} );
-            }
+            } 
             console.log("Creating new websocket:  ", this.HOST);
             this.socket = new WebSocket(this.HOST);
             this.socket.addEventListener('open', this.onOpen.bind(this));
@@ -316,6 +328,7 @@ class WebSocketClient {
 
 myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
 console.log("websocket created on start for ", myWebSocket.HOST);
+myWebSocket.emptyDict()
 
 function setMPVnice() {
     const findProcessCommand = 'ps aux | grep mpv'; // Command to find MPV process
@@ -671,81 +684,87 @@ function getLatestHLSSegmentF() {
     let streamPath = recvVariables["stream_files_path"];
     let segmentBufferN  = recvVariables["segment_buf_N"];
     assert(recvVariables["segment_buf_N"] != null);
+    let playlistFile = streamPath + '/out.m3u8';
     if (!debugPaused)
-        fs.readFile(streamPath + '/out.m3u8', 'utf8', (err, data) => {
+        fs.access(playlistFile, fs.constants.F_OK, (err) => {
             if (err) {
-                console.error('Error reading file:', err);
-                return;
-            }
-            const lines = data.split('\n');
-            const latestsegment = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
+                console.error('playlistFile does not exist');
+            } else {
+                fs.readFile(playlistFile, 'utf8', (err, data) => {
+                    if (err) {
+                        console.error('Error reading file:', err);
+                        return;
+                    }
+                    const lines = data.split('\n');
+                    const latestsegment = lines[lines.length - 1] == "" ? lines[lines.length - 2] : lines[lines.length - 1];
 
-            const regex = /(\d+)/;
-            if (latestsegment) {
-                let partial = latestsegment.match(regex);
-                if (!partial)
-                    return;
-                const number = partial[0];
-                latestSSegment = parseInt(number, 10);
-                let d = latestSSegment - latestCSegment;
-                console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
-                if (d > segmentBufferN) {
+                    const regex = /(\d+)/;
+                    if (latestsegment) {
+                        let partial = latestsegment.match(regex);
+                        if (!partial)
+                            return;
+                        const number = partial[0];
+                        latestSSegment = parseInt(number, 10);
+                        let d = latestSSegment - latestCSegment;
+                        console.log(`Server segment: ${latestSSegment} client segment ${latestCSegment} delta ${d}`);
+                        if (d > segmentBufferN) {
 
-                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
-                        .then(res => {
-                            try {
-                                if (res.success) {
-                                    let data = JSON.parse(res.data);
-                                    if (!data) {
-                                        console.log("---> pausing delta <--- \n")
-                                        myWebSocket.sendWithResponse({
-                                            //type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "yes"]
-                                            type: "perform_operation", operation_type: 'pause_player', value: "yes"
+                            myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
+                                .then(res => {
+                                    try {
+                                        if (res.success) {
+                                            let data = JSON.parse(res.data);
+                                            if (!data) {
+                                                console.log("---> pausing delta <--- \n")
+                                                myWebSocket.sendWithResponse({
+                                                    //type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "yes"]
+                                                    type: "perform_operation", operation_type: 'pause_player', value: "yes"
 
-                                        }).then(resMsg => { })
-                                    }
-                                }else { console.log("error ", res.data);  }
-                            } catch (error) { console.log("error ", error); }
+                                                }).then(resMsg => { })
+                                            }
+                                        } else { console.log("error ", res.data); }
+                                    } catch (error) { console.log("error ", error); }
 
-                        })
-                    // player.getProperty("pause")
-                    //     .then((res) => {
-                    //         if (!res) {
-                    //             console.log("---> pausing delta <--- \n")
-                    //             player.pause();
-                    //         }
-                    //     }).catch((e) => { console.log(e) });
+                                })
+                            // player.getProperty("pause")
+                            //     .then((res) => {
+                            //         if (!res) {
+                            //             console.log("---> pausing delta <--- \n")
+                            //             player.pause();
+                            //         }
+                            //     }).catch((e) => { console.log(e) });
 
-                }
-                else {
-                    myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
-                        .then(res => {
-                            try {
-                                if (res.success) {
-                                    let data = JSON.parse(res.data);
-                                    if (data) {
-                                        console.log("---> resuming delta <--- \n")
-                                        myWebSocket.sendWithResponse({
-                                            //  type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
-                                            type: "perform_operation", operation_type: 'pause_player', value: "no"
-                                        }).then(resMsg => { })
-                                    }
-                                }else { console.log("error ", res.data);  }
-                            } catch (error) { console.log("error ", error); }
+                        }
+                        else {
+                            myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "pause" })
+                                .then(res => {
+                                    try {
+                                        if (res.success) {
+                                            let data = JSON.parse(res.data);
+                                            if (data) {
+                                                console.log("---> resuming delta <--- \n")
+                                                myWebSocket.sendWithResponse({
+                                                    //  type: "perform_operation", operation_type: 'post_mpv_command', command: ["set_property", "pause", "no"]
+                                                    type: "perform_operation", operation_type: 'pause_player', value: "no"
+                                                }).then(resMsg => { })
+                                            }
+                                        } else { console.log("error ", res.data); }
+                                    } catch (error) { console.log("error ", error); }
 
-                        })
-                    // player.getProperty("pause")
-                    //     .then((res) => {
-                    //         if (res) {
-                    //             console.log("---> resuming delta <--- \n")
-                    //             player.resume();
-                    //         }
-                    //     }).catch((e) => { console.log(e) });
+                                })
+                            // player.getProperty("pause")
+                            //     .then((res) => {
+                            //         if (res) {
+                            //             console.log("---> resuming delta <--- \n")
+                            //             player.resume();
+                            //         }
+                            //     }).catch((e) => { console.log(e) });
 
-                }
+                        }
+                    }
+                });
             }
         });
-
 }
 
 function startMpvEv(file) {
@@ -1074,9 +1093,9 @@ app.post('/mpv-get-perc-pos', (req, res) => {
                     let duration = parseFloat(msg.data.video_duration)
                     let sliderPos = (pos / duration) * 1000;
                     console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                    res.send({ number: sliderPos });
+                    res.send({ number: sliderPos, status: "RUNNING", play_session_id: msg.play_session_id, mirroring_mode: msg.mirroring_mode });
                 }
-                else res.send({ number: -1 })
+                else res.send({ number: -1, status: "NOT RUNNING", play_session_id: null, mirroring_mode: null  })
             })
     }
     else
@@ -1205,7 +1224,7 @@ function timedPaused(customtime) {
 }
 
 PORT = 45145
-HOST = "127.0.0.1"
+HOST = "192.168.1.163"
 let server = app.listen(PORT, inColab ? "127.0.0.1" : HOST, () => {
     console.log(`Server is listening at http://${HOST}:${PORT}`);
 

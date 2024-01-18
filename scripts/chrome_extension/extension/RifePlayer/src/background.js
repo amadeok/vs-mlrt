@@ -20,18 +20,18 @@ chrome.runtime.onInstalled.addListener(() => {
   // Set an initial alarm after installation
   const currentTime = new Date().toLocaleTimeString();
   console.log("Current time onInstalled:", currentTime);
-  if (!self.myWebSocket){
-  myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
-  console.log("websocket created on Installed for ", myWebSocket.HOST);
+  if (!self.myWebSocket) {
+    myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
+    console.log("websocket created on Installed for ", myWebSocket.HOST);
   }
   chrome.alarms.create("myAlarm", {
     periodInMinutes: 0.5 // Every 30 seconds
   });
 });
 
-chrome.runtime.onStartup.addListener(function() {
+chrome.runtime.onStartup.addListener(function () {
   console.log("Extension started (including browser start)");
-  if (!self.myWebSocket){
+  if (!self.myWebSocket) {
     myWebSocket = new WebSocketClient('ws://127.0.0.1:65432');
     console.log("websocket created on start for ", myWebSocket.HOST);
     }
@@ -210,7 +210,7 @@ class WebSocketClient {
     const  body = JSON.parse(event.data);
     let message =body.id ?  body.message  : body;
     let id = body.id
-    console.log('body:', body, body.id);
+    console.log('body:', body, body.id, message.type);
 
     if (message.type === 'perform_operation') {
       console.log('Performing operation:', message.operation_type);

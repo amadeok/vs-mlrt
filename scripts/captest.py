@@ -5,7 +5,7 @@ import keyboard
 while True:
     print("pressed")
     keyboard.press_and_release('space')
-    time.sleep(10)
+    time.sleep(60)
     
 import yt_dlp
 

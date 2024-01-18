@@ -132,18 +132,25 @@ function monitor_partial()
     end
 
     for key, value in pairs(luaTable) do
-        print(key, value)
+        print("key: ", key,  " value: ", value)
     end
     if luaTable["type"] == "data"  and luaTable["resposeOf"] == "get_duration_and_curtime" then
         print("Received data:")
-        local browserCurTime = luaTable["data"]["video_curTime"]
-        local browserDuration = luaTable["data"]["video_duration"]
-        if browserCurTime and browserCurTime then
-            browser_video_cur_time_perc = round(length * (1 / (browserDuration / browserCurTime)))
+        print(luaTable)
+        if  luaTable["data"] then
+            local browserCurTime = luaTable["data"]["video_curTime"]
+            local browserDuration = luaTable["data"]["video_duration"]
+            if browserCurTime and browserCurTime then
+                browser_video_cur_time_perc = round(length * (1 / (browserDuration / browserCurTime)))
+            else
+                browser_video_cur_time_perc = 0
+            end
+            print("browser_video_cur_time_perc", browser_video_cur_time_perc)
+            print("video_curTime:", browserCurTime)
         else
-            browser_video_cur_time_perc = 0
+            print("The 'data' field does not exist in the Lua table.")
         end
-        print("browser_video_cur_time_perc", browser_video_cur_time_perc)
+
 
     elseif luaTable["type"] == "perform_operation" and luaTable["operation_type"] == "show_seek_bar" then
         local perc = luaTable["operation_details"]["mousePosPerc"]
