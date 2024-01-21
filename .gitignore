@@ -14,3 +14,10 @@ vapoursynth_r61_ubuntu_22.04.2_colab_LTS.zip
 scripts/__pycache__/vsmlrt.cpython-311.pyc
 output.avi
 test.mp4
+scripts/server/bin_test/node_modules/
+scripts/server/bin_test/hello.exe
+scripts/server/bin_test/sea-prep.blob
+scripts/server/bin_test/server-out.js
+scripts/server/express-hls-example/src/server-out.js
+scripts/server/express-hls-example/src/server.exe
+scripts/server/express-hls-example/src/sea-prep.blob

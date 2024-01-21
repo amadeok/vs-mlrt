@@ -11,7 +11,9 @@
     "watchcpp_": "nodemon ./src/appcpp.js",
     "live": "livereload . -w 1000 -d --exclusions stream ",
     "watch2": "run-p watch live",
-    "watchcpp": "run-p watchcpp_ live"
+    "watchcpp": "run-p watchcpp_ live",
+    "build": "esbuild src/appcpp.js --bundle --platform=node --outfile=src/server-out.js"
+
   },
   "repository": {
     "type": "git",
@@ -24,6 +26,7 @@
   },
   "homepage": "https://github.com/HoseungJang/express-hls-example#readme",
   "dependencies": {
+    "esbuild": "0.17.17",
     "@ffmpeg-installer/ffmpeg": "^1.0.20",
     "express": "^4.17.1",
     "ffi-napi": "^4.0.3",

@@ -1,3 +1,4 @@
+console.log("Start")
 const express = require('express');
 const app = express();
 //const http = require('http').Server(app);
@@ -6,7 +7,7 @@ const hls = require('hls-server');
 //let mpv = require('mpv-ipc');
 const { exec, spawnSync, childProcess } = require('child_process');
 const child_process = require('child_process');
-var ffmpeg = require('fluent-ffmpeg');
+//var ffmpeg = require('fluent-ffmpeg');
 const bodyParser = require('body-parser'); // Middleware to parse the request body
 const path = require('path');
 const { start } = require("repl");
@@ -1228,13 +1229,13 @@ HOST = "192.168.1.163"
 let server = app.listen(PORT, inColab ? "127.0.0.1" : HOST, () => {
     console.log(`Server is listening at http://${HOST}:${PORT}`);
 
-    if (inColab) {
-        const ngrok = require('ngrok');
-        (async function () {
-            const url = await ngrok.connect(PORT);
-            console.log(`Server is accessible from the internet at: ${url}`);
-        })();
-    }
+    // if (inColab) {
+    //     const ngrok = require('ngrok');
+    //     (async function () {
+    //         const url = await ngrok.connect(PORT);
+    //         console.log(`Server is accessible from the internet at: ${url}`);
+    //     })();
+    // }
 });
 
 new hls(server, {

@@ -30,6 +30,10 @@ def pad_to_multiple_of_32(clip):
 
 clip = video_in
 print("Vapoursynth input format: ", clip.format)
+print("Python Path:")
+print(sys.executable)
+print("Python Version:")
+print(sys.version)
 try:
     cMatrix = '709'
     cRange = 'limited'

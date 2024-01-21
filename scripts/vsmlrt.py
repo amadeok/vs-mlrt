@@ -22,24 +22,41 @@ import tempfile
 import time
 import typing
 import zlib
+import pyautogui
+
 print(sys.path)
 import vapoursynth as vs
 from vapoursynth import core
 trtpath = ""
 
 
+got_trt_dll_path = os.getenv( "RIFE_PLAYER_TRT_DLL_PATH")
+if got_trt_dll_path:
+    print("'RIFE_PLAYER_TRT_DLL_PATH' variable found")
+    trtpath = got_trt_dll_path
+else:
+    print("Getting vstrt.dll path from file")
+    if os.path.isfile("trt_dll_path.txt"):
+        with open("trt_dll_path.txt", 'r') as file:
+            path = file.read()
+            if os.path.isfile(path):
+                trtpath = path
+if trtpath == "":
+    pyautogui.alert('Error: failed to found vstrt.dll', 'vstrt.dll NOT found ')
 
-if sys.platform.startswith('linux'):
-    if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
-        trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
-    elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
-        trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
-elif sys.platform.startswith('win'):
-    trtpath= r"E:\Users\amade\rifef\VSTRT\vstrt.dll"
-  
+
+    # if sys.platform.startswith('linux'):
+    #     if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
+    #         trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
+    #     elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
+    #         trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
+    # elif sys.platform.startswith('win'):
+    #     trtpath= r"E:\Users\amade\rifef\VSTRT\test123\vstrt.dll"
+    
 
 core.std.LoadPlugin(path=trtpath)
-
+with open("trt_dll_path.txt", 'w+') as file:
+    path = file.write(trtpath)
 
 def get_plugins_path() -> str:
     path = b""
@@ -1316,7 +1333,6 @@ def trtexec(
             cmd = " ".join(args)
             print("using os.system, ", cmd)
             return os.system(cmd)
-    import pyautogui
     pyautogui.alert('New resolution found, an one time optimization step will be performed for this resolution. It will take a few minutes.', 'New resolution found')
 
     useSubp_ =  not sys.platform.startswith('linu') and 0

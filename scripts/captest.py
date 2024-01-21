@@ -1,7 +1,9 @@
 import os
 import time
 import keyboard
-
+import vapoursynth
+from vapoursynth import core
+print(core.version())
 while True:
     print("pressed")
     keyboard.press_and_release('space')

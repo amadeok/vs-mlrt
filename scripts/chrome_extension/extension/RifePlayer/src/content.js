@@ -242,10 +242,10 @@ if (!window.hasScriptInjected) {
     
       return totalSeconds;
     }
-    function getDisneyPlusDuration() {
+    function getDisneyPlusDuration(videoElem) {
       const timeRemElem = document.querySelector('[class*="time-remaining-label"]');
       let remSecs = timeStringToSeconds(timeRemElem.innerText);
-      return videoElement.currentTime + remSecs;
+      return videoElem.currentTime + remSecs;
     }
     var simulateKeyPress = function(keyCode, element) {
       var event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, keyCode: keyCode });
@@ -288,7 +288,7 @@ if (!window.hasScriptInjected) {
         else if (document.title.includes("Disney+")) {
           //if (typeof bSeeking === 'undefined' || !bSeeking || 1) { bSeeking = true;
            
-            let duration = getDisneyPlusDuration();
+            let duration = getDisneyPlusDuration(videoElement);
             let seekTime = (request.action.operation_details / 100) * duration;
             console.log("loop", videoElement.currentTime, seekTime, request.action.operation_details)
             let ctGtSeekTime = () => { return  videoElement.currentTime > seekTime; }
@@ -305,7 +305,7 @@ if (!window.hasScriptInjected) {
 
               function task(timeout){
                 if ( fun() && !timeout) {
-                  let duration = getDisneyPlusDuration();
+                  let duration = getDisneyPlusDuration(videoElement);
                   //let seekTime = (request.action.operation_details / 100) * duration;
                   console.log("loop", sleepTime, " ct: ", videoElement.currentTime.toFixed(2),  " dur: ", duration.toFixed(2), "seekTime:", seekTime.toFixed(2), "perc: ", request.action.operation_details, (Math.abs(videoElement.currentTime - seekTime).toFixed(2)))
                   simulateKeyPress(key, videoElement); // Left arrow key
@@ -350,7 +350,7 @@ if (!window.hasScriptInjected) {
         if (videoElement){
           let duration = videoElement.duration;
           if (document.title.includes("Disney+")) 
-            duration = getDisneyPlusDuration();
+            duration = getDisneyPlusDuration(videoElement);
          // console.log("dur", duration)
           sendResponse({ operation_result: true, data: { video_duration: duration, video_curTime: videoElement.currentTime } });
         }
