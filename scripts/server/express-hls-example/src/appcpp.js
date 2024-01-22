@@ -19,6 +19,9 @@ const { setTimeout } = require('timers');
 const WebSocket = require('ws');
 
 let debugPaused = false;
+let bIsRemotePaused = "noAction";
+const remotePauseEnum = { pauseQueued: 1, playQueued: 2, noAction: 0 }
+
 // const liveReloadServer = livereload.createServer();
 // liveReloadServer.watch(path.join(__dirname, 'public'));
 // app.use(connectLiveReload());
@@ -686,7 +689,7 @@ function getLatestHLSSegmentF() {
     let segmentBufferN  = recvVariables["segment_buf_N"];
     assert(recvVariables["segment_buf_N"] != null);
     let playlistFile = streamPath + '/out.m3u8';
-    if (!debugPaused)
+    if (bIsRemotePaused !== "pauseQueued")
         fs.access(playlistFile, fs.constants.F_OK, (err) => {
             if (err) {
                 console.error('playlistFile does not exist');
@@ -791,7 +794,16 @@ app.get('/style', (req, res) => {
 app.get('/clientjs', (req, res) => {
     return res.status(200).sendFile(`${__dirname}/client.js`);
 });
+app.get('/client_utils', (req, res) => {
+    return res.status(200).sendFile(`${__dirname}/client_utils.js`);
+});
 
+app.get('/remote', (req, res) => {
+    return res.status(200).sendFile(`${__dirname}/remote.html`);
+});
+app.get('/remotejs', (req, res) => {
+    return res.status(200).sendFile(`${__dirname}/remote.js`);
+});
 
 app.get('/files', (req, res) => {
     //config = readINI(configFile);
@@ -842,14 +854,39 @@ app.get('/files', (req, res) => {
 function checkFile(filePath, callback) {
     fs.access(filePath, fs.constants.F_OK, (err) => {
         if (err) {
-            // File doesn't exist yet, wait for a while and check again
             setTimeout(() => {
                 checkFile(filePath, callback);
             }, 1000); // wait for 1 second before checking again (adjust the time as needed)
         } else {
-            // File exists
             callback();
         }
+    });
+}
+
+
+
+function checkFile2(filePath, intervalTime = 1000, timeout = Infinity) {
+    return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        function check() {
+            fs.access(filePath, fs.constants.F_OK, (err) => {
+                if (!err) {
+                    resolve(filePath);
+                } else {
+                    const elapsedTime = Date.now() - startTime;
+
+                    // Check if the timeout has been reached
+                    if (elapsedTime >= timeout) {
+                        reject(new Error(`Timeout reached for file: ${filePath}`));
+                    } else {
+                        // File doesn't exist yet, wait for a while and check again
+                        setTimeout(check, intervalTime);
+                    }
+                }
+            });
+        }
+        check(); // Start the initial check
     });
 }
 
@@ -877,7 +914,7 @@ app.get('/mpv-play-file', (req, res) => {
                         console.log(`File ${streamPath + "\\out.m3u8"} exists.`);
                         if (latestSSegmentInt)
                             clearInterval(latestSSegmentInt);
-                        latestSSegmentInt = setInterval(getLatestHLSSegmentF, 10000);
+                        latestSSegmentInt = setInterval(getLatestHLSSegmentF, 5000);
 
                         myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "track-list"  })
                             .then(tr => {
@@ -1012,6 +1049,7 @@ app.post('/mpv-track-req', async (req, res) => {
 });
 
 app.post('/mpv-seek', (req, res) => {
+    respondedIPs.clear()
 
     const sliderValue = req.body.sliderValue;
     if (1) {
@@ -1076,11 +1114,7 @@ app.post('/mpv-seek', (req, res) => {
     // res.json({ message: 'Slider value received successfully.' });
 });
 
-
-app.get('/test1', (req, res) => {
-    res.send({ number: 123 });
-});
-
+const respondedIPs = new Set();
 
 app.post('/mpv-get-perc-pos', (req, res) => {
 
@@ -1094,13 +1128,20 @@ app.post('/mpv-get-perc-pos', (req, res) => {
                     let duration = parseFloat(msg.data.video_duration)
                     let sliderPos = (pos / duration) * 1000;
                     console.log('Server pos', pos.toFixed(2), " slider pos: ", sliderPos.toFixed(2), " Dur: ", duration);
-                    res.send({ number: sliderPos, status: "RUNNING", play_session_id: msg.play_session_id, mirroring_mode: msg.mirroring_mode });
+                    const clientIP = req.ip || req.connection.remoteAddress;
+                    let outRemPause = bIsRemotePaused;
+                    if (respondedIPs.has(clientIP) && bIsRemotePaused == "queueSeekToEnd")
+                        outRemPause = "noAction";
+                    
+                    res.send({ number: sliderPos, player_status: "RUNNING", play_session_id: msg.play_session_id, mirroring_mode: msg.mirroring_mode, is_remote_paused : outRemPause });
+                    if (bIsRemotePaused == "queueSeekToEnd")
+                        respondedIPs.add(clientIP);
                 }
-                else res.send({ number: -1, status: "NOT RUNNING", play_session_id: null, mirroring_mode: null  })
+                else res.send({ number: -1, player_status: "STOPPED", play_session_id: null, mirroring_mode: null, is_remote_paused : "noAction"  })
             })
     }
     else
-        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration" })
+        myWebSocket.sendWithResponse({ type: "perform_operation", operation_type: 'get_mpv_property', property_name: "duration", is_remote_paused : noAction })
             .then(durationMsg => {
                 if (durationMsg) {
                     if (durationMsg.success == false) {
@@ -1154,16 +1195,53 @@ app.post('/mpv-get-perc-pos', (req, res) => {
     
 });
 
+
+app.post('/remote-pause', (req, res) => {
+
+    const postData = req.body;
+    console.log("remote pause ", req.body)
+    bIsRemotePaused = postData.newState;
+   // if (bIsRemotePaused != "queueSeekToEnd")
+        respondedIPs.clear()
+
+    myWebSocket.sendWithResponse({
+        type: "perform_operation", operation_type: 'pause_player', value: postData.newState === "pauseQueued" ?  "yes" : "no"
+    }).then(resMsg => {
+        if (resMsg.success)
+            bIsRemotePaused = postData.newState;
+        res.send({ message: "vars updated",  is_remote_paused : bIsRemotePaused, success: resMsg.success });
+
+     })
+    
+});
+app.post('/short-seek', (req, res) => {
+
+    const postData = req.body;
+    console.log("short seek ", req.body)
+    bIsRemotePaused = postData.b_forward;
+   
+    respondedIPs.clear()
+
+    myWebSocket.sendWithResponse({
+        type: "perform_operation", operation_type: 'short_seek', b_forward: postData.b_forward
+    }).then(resMsg => {
+        res.send({ message: "short seek response",  success: resMsg.success });
+    })
+    
+});
+
+
+
 app.get('/mpv-is-player', (req, res) => {
     //myWebSocket.socket.send(JSON.stringify({ type: "perform_operation", operation_type: 'open_file', file_path: file_path }));
     if (myWebSocket.socket.readyState === WebSocket.OPEN) {
 
         myWebSocket.sendWithResponse({ type: "get_player_status" })
             .then(messageData => {
-                if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING")
-                    res.send({ number: 1 });
-                else
-                    res.send({ number: 0 });
+                // if (messageData && messageData.player_status == "STARTING" || messageData && messageData.player_status == "RUNNING")
+                //     res.send({ number: 1 });
+                // else
+                    res.send(messageData);
 
                 console.log(`mpv-is-player: ${messageData}`);
             })
@@ -1257,17 +1335,25 @@ new hls(server, {
                     last = true;
                 }
             }
-            //  else if (usetimerPauser && ext == 'ts') {
-            //     timedPaused();
-            // }
+
             console.log("GET received: " + req.url + (last ? "*" : ""))
             fs.access(__dirname + req.url, fs.constants.F_OK, function (err) {
                 if (err) {
-                    console.log('File not exist'); //                    checkFile(`${__dirname}/${req.url}`)
+                    console.log('File not exist');
+                    let filePath = `${__dirname}/${req.url}`
 
-                    return cb(null, false);
-                }
-                cb(null, true);
+                    checkFile2(filePath, 500, 20 * 1000)
+                        .then((filePath) => {
+                            console.log(`File ${filePath} exists now.`);
+                            cb(null, true);
+                        })
+                        .catch((error) => {
+                            console.error(error.message);
+                            return cb(null, false);
+                        });
+
+                } else
+                    cb(null, true);
             });
         },
         getManifestStream: (req, cb) => {

@@ -6,7 +6,7 @@
   "scripts": {
     "starttcp": "node ./src/tcp.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node ./src/app.js",
+    "start": "node ./src/appcpp.js",
     "watch": "nodemon ./src/app.js",
     "watchcpp_": "nodemon ./src/appcpp.js",
     "live": "livereload . -w 1000 -d --exclusions stream ",

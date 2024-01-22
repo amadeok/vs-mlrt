@@ -1,196 +1,17 @@
 
-const playPauseBtn = document.getElementById('triggerButton');
-const fileListElem = document.getElementById('file-list');
 const videoElement = document.getElementById('video');
-const toggleButton = document.getElementById('toggle-button');
+const seekSlider = document.getElementById('seek-slider'); 
+
 var currentSegmentStartTime = 0;
 let hls = null;
-let playInterval = null;
-let mirroringMode = null;
-let playSessionId = null;
-let playerStatus = null;
-let first = false;
-function getParentDirectory(path) {
-    const directories = path.split('/');
-    directories.pop();
-    const parentDirectory = directories.join('/');
-    return parentDirectory;
-}
 
-
-
-
-async function getListOfFiles(subfolder) {
-    try {
-        const response = await fetch(`/files?subfolder=${subfolder}`);
-        if (response.ok) {
-            const files = await response.json();
-            if (files.error && files.error  == "null network folder")
-                alert("The Rife Player app doesn't appear to be running, launch it, then reload the page");
-            return files;
-        } else {
-            console.error('Error retrieving files:', response.statusText);
-            return {};
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        return {};
-    }
-}
-
-function isPlayerRunning() {
-    return new Promise((resolve, reject) => {
-        fetch('/mpv-is-player')
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                }
-                throw new Error('Error checking player: ' + response.statusText);
-            })
-            .then(res => {
-                console.log("Player running: ", res.number);
-                resolve(res.number);
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                reject(0);
-            });
-    });
-}
-
-const TCPCheckbox = document.getElementById('tcp-checkbox');
-let requestingFile = false;
-function createListElement(name, type, absPath, fileListElem) {
-    const listItem = document.createElement('li');
-    listItem.className = 'file-list-item';
-    const link = document.createElement('a');
-    link.href = '#'; // You can set the actual file path here
-    link.textContent = name;
-    listItem.setAttribute('ftype', type);
-    listItem.setAttribute('absPath', absPath);
-    if (type == "folder")
-        link.id = type + folder_index;
-    else
-        link.id = type + file_index;
-
-    listItem.appendChild(link);
-    // // Add a separator (hr element) between each list item except the last one
-    // if (index < files.length - 1) {
-    //     listItem.appendChild(document.createElement('hr'));
-    // }
-    fileListElem.appendChild(listItem);
-    document.getElementById(link.id).onclick = function () {
-        // Your JavaScript code here
-        console.log("Link clicked! ", link.textContent);
-        absPath = listItem.getAttribute('absPath', absPath);
-        let type = listItem.getAttribute('ftype');
-        if (type == "folder") {
-            console.log("browser file update")
-            updateFilebrowser(absPath);
-        }
-        else if (type == "upFolder") {
-            console.log("browser file update up folder")
-            updateFilebrowser(absPath);
-        } else if (type == "file") {
-            if (requestingFile)
-                alert("Please wait, requesting file");
-            else {
-                console.log("play file ")
-
-                requestingFile = true;
-                ret = fetch(`/mpv-play-file?file=${absPath}&useTCP=${TCPCheckbox.checked}`)
-                // const response = fetch("/mpv-play-file", {
-                //     method: 'POST',
-                //     headers: {
-                //         'Content-Type': 'application/json',
-                //     },
-                //     body: JSON.stringify({ absPath: absPath, S: reqtype, index: index }),
-                // });
-                ret
-                    .then(response => {
-                        let res = response.body.error;
-                        console.log(" response ", res);
-                        
-                        if (!response.ok) {
-                            return response.json().then((errorData) => {
-                                throw new Error(errorData.error.message);
-                              });                        }
-                        return response.json().then((data) => {
-                            return data;
-                          });        
-                    })
-                    .then((data) => {
-                        console.log("Then success")
-                            if (!TCPCheckbox.checked) {
-                                clearInterval(playInterval);
-                                if (hls) {
-                                    hls.destroy();
-                                }
-                                video.pause();
-                                startPlayEv();
-                            }
-                            console.log('Play file server response:', data.trackList, " error ", data.error);
-                        
-
-                    })
-                    .catch((error) => { 
-                        console.error('Error:',  error.message);                  
-                        alert( error.message);
-                        
-                      })
-                    .finally(() => { requestingFile = false; });
-            }
-        }
-        // Prevent the default behavior of the link (e.g., navigating to a different page)
-        return false;
-    };
-
-
-
-}
-
-function renderFileList(files, subfolder) {
-    fileListElem.innerHTML = '';
-    file_index = 0;
-    folder_index = 0;
-    if (!subfolder == '')
-        createListElement("... Previous folder", "upFolder", getParentDirectory(subfolder), fileListElem);
-
-    files.forEach((file, index) => {
-        createListElement(file.name, file.type, file.absPath, fileListElem);
-        if (file.type == "folder")
-            folder_index++;
-        else
-            file_index++;
-    });
-}
-
-function updateFilebrowser(subfolder) {
-    let files;
-    let filesProm = getListOfFiles(subfolder);
-    filesProm
-        .then((files_) => {
-            files = files_;
-            console.log("files", files)
-            if (files.length)
-                renderFileList(files, subfolder);
-            
-        })
-        .catch((error) => { console.log(error); })
-}
-
-function showFileBrowser() {
-    console.log("Showing player");
-    fileListElem.style.display = 'block';
-    videoElement.style.display = 'none';
-    toggleButton.textContent = 'Show Video';
-}
 function showPlayer() {
     console.log("Showing file browser")
     fileListElem.style.display = 'none';
     videoElement.style.display = 'block';
     toggleButton.textContent = 'Show File Browser';
 }
+
 function startHls() {
     console.log("Starting hls")
     const videoSrc = '/stream/out.m3u8';
@@ -248,7 +69,6 @@ function startPlayEv() {
     showPlayer();
 }
 
-let isTherePlayer;
 document.addEventListener('DOMContentLoaded', function () {
     if (playInterval)
             clearInterval(playInterval);
@@ -256,13 +76,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     isPlayerRunning()
         .then(result => {
-            isTherePlayer = result;
+            isTherePlayer = result.player_status == "STARTING" || result.player_status == "RUNNING";
             if (isTherePlayer) {
                 startPlayEv();
             }
             else
                 showFileBrowser();
-            console.log('Player status:', isTherePlayer);
+            procVars(result);
+
+            console.log('Player status:', result.player_status);
         }).catch(error => { console.error('Error:', error); });
 
     // if (videoElement.paused) {
@@ -284,128 +106,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
     toggleButton.addEventListener('click', toggleElements);
 
+    videoElement.addEventListener('seeking', function () {
+        // Calculate the target seek position with low latency
+        console.log("seeking list")
+        //  var targetSeekTime = videoElement.duration; // Seek forward by 5 seconds (you can adjust this value)
+    
+        // Perform the seek operation
+        // if (hls.media) {
+        //     // Round the seek time to the nearest segment boundary for better accuracy
+        //     var nearestSegmentIndex = hls.media.segments.findSegmentIndex(targetSeekTime);
+        //     if (nearestSegmentIndex !== null) {
+        //         var nearestSegment = hls.media.segments.getSegment(nearestSegmentIndex);
+        //         var seekTime = nearestSegment.start;
+    
+        //         // Perform the seek operation
+        //         video.currentTime = seekTime;
+        //     }
+        // }
+    });
+    
+    videoElement.addEventListener('play', function () {
+        remotePause("noAction");
+    });
+    //seekSlider.addEventListener('input', handleSeekBarInput);
+    //playPauseBtn.addEventListener('click', playPauseFun);
+    
+    subCycleBtn.addEventListener('click', async () => {
+        trackReqFun("sub", "cycle", null);
+    });
+    
+    audioCycleBtn.addEventListener('click', async () => {
+        trackReqFun("audio", "cycle", null);
+    });
+    
 });
-const trackReq = { sub: 0, audio: 1, cycle: 2, getCurrent: 3 }
-
-async function trackReqFun(which, reqtype, index) {
-    let field = which == "sub" ? subtitleNameField : audioNameField;
-    try {
-        const response = await fetch('/mpv-track-req', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ which: which, reqtype: reqtype, index: index }),
-        });
-        const data = await response.json();
-        console.log(data);
-        field.innerText = data.reqRes.title ? data.reqRes.title : data.reqRes.lang;
-
-    } catch (error) {
-        console.error('Error:', error);
-        field.innerText = 'Error occurred. Please try again.';
-    }
-}
-
-const subtitleNameField = document.getElementById('subtitle-name');
-const subCycleBtn = document.getElementById("subtitle-cycle-button");
-const audioNameField = document.getElementById('audio-track-name');
-const audioCycleBtn = document.getElementById("audio-cycle-button");
-
-subCycleBtn.addEventListener('click', async () => {
-    trackReqFun("sub", "cycle", null);
-});
-
-audioCycleBtn.addEventListener('click', async () => {
-    trackReqFun("audio", "cycle", null);
-});
-
-
-
-const seekSlider = document.getElementById('seek-slider');
-const sliderValueDisplay = document.getElementById('slider-value');
-let debounceTimeout;
-let bSeeking = false;
 
 // videoElement .onwaiting = function() {
 //     console.log("Video is buffering");
 // };
 
-videoElement.onplaying = function () {
-    console.log("Video is no longer buffering and is playing");
-    if (bSeeking) {
-        videoElement.currentTime = videoElement.duration;
-        bSeeking = false;
-    }
-};
-
-
-videoElement.addEventListener('seeking', function () {
-    // Calculate the target seek position with low latency
-    console.log("seeking list")
-    //  var targetSeekTime = videoElement.duration; // Seek forward by 5 seconds (you can adjust this value)
-
-    // Perform the seek operation
-    // if (hls.media) {
-    //     // Round the seek time to the nearest segment boundary for better accuracy
-    //     var nearestSegmentIndex = hls.media.segments.findSegmentIndex(targetSeekTime);
-    //     if (nearestSegmentIndex !== null) {
-    //         var nearestSegment = hls.media.segments.getSegment(nearestSegmentIndex);
-    //         var seekTime = nearestSegment.start;
-
-    //         // Perform the seek operation
-    //         video.currentTime = seekTime;
-    //     }
-    // }
-});
-
-seekSlider.addEventListener('input', function () {
-    // Clear the previous debounce timeout
-    clearTimeout(debounceTimeout);
-
-    bSeeking = true;
-    console.log("Range input clicked!", bSeeking);
-    // Set a new debounce timeout
-    debounceTimeout = setTimeout(() => {
-        const sliderValue = seekSlider.value;
-        //sliderValueDisplay.textContent = `Slider Value: ${sliderValue}`;
-
-        // Make a POST request to the server
-        fetch('/mpv-seek', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ sliderValue: sliderValue }),
-        })
-            .then(response => response.json())
-            .then(data => {
-                // Handle the response from the server if needed
-                console.log('Server response:', data);
-            })
-            .catch(error => {
-                console.error('Error:', error);
-            }).finally(() => {
-                videoElement.currentTime = videoElement.duration;
-
-                // if (hls)
-                //     hls.destroy()
-                // startHls();
-
-                // let counter = 0; // Counter to keep track of the number of times the interval has run
-                // const intervalId = setInterval(() => {
-                //     counter++;
-                //     videoElement.currentTime = videoElement.duration;
-                //     console.log("seek to end timeout ", counter);
-                //     if (counter >= 2) {
-                //         clearInterval(intervalId); // Clear the interval
-                //     }
-                // }, 1000); //
-
-
-            });
-    }, 100); // Debounce time in milliseconds (e.g., 300ms)
-});
+// videoElement.onplaying = function () {
+//     console.log("Video is no longer buffering and is playing");
+//     if (bSeeking) {
+//         videoElement.currentTime = videoElement.duration;
+//         bSeeking = false;
+//     }
+// };
 
 
 function togglePlayPause() {
@@ -418,74 +164,7 @@ function togglePlayPause() {
     }
 }
 
-playPauseBtn.addEventListener('click', async () => {
-    try {
-        const response = await fetch('/mpv-pause-cycle', {
-            method: 'POST',
-        });
-        const data = await response.json();
-        document.getElementById('result').innerText = data.message;
-    } catch (error) {
-        console.error('Error:', error);
-        document.getElementById('result').innerText = 'Error occurred. Please try again.';
-    }
-    //togglePlayPause();
-});
 
 
-
-async function makeRequest() {
-    try {
-        //console.log("mreq ", bSeeking, hls.levels[hls.currentLevel] , hls.levels[hls.currentLevel].details)
-        if (!bSeeking) {
-           // if (hls.levels[hls.currentLevel] && hls.levels[hls.currentLevel].details) {
-                // let frags = hls.levels[hls.currentLevel].details.fragments;
-                // let last = frags[frags.length - 1];
-                // let d = last.start - currentSegmentStartTime;
-                const response = await fetch('/mpv-get-perc-pos', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ clientPlaybackD: null }),
-                });
-                const data = await response.json();
-                let lastplaySessionId = localStorage.getItem('play_session_id');
-                localStorage.setItem('prev_play_session_id', lastplaySessionId);
-                localStorage.setItem('play_session_id', data.play_session_id);
-                playSessionId =  data.play_session_id;
-
-                let lastStatus = localStorage.getItem('play_status');
-                localStorage.setItem('prev_play_status', lastplaySessionId);
-                localStorage.setItem('play_status', data.status);
-                playerStatus =  data.status;
-                console.log("Status: ", data.status,   data);
-
-                if (data.status == "RUNNING") {
-                    console.log(" mirroring mode: ", data.mirroring_mode, " play session id", data.play_session_id);
-                    if ( lastplaySessionId != playSessionId) {
-                        alert("New play session");
-                        location.reload();
-                    }
-                }
-                else if (lastStatus != playerStatus){
-                    videoElement.pause();
-                    showFileBrowser();
-                    alert("Player has stopped")
-                    console.log("Not running");
-                }
-
-                mirroringMode = data.mirroring_mode;
-                //playSessionId =  data.play_session_id;
-                //localStorage.setItem('play_session_id', data.play_session_id);
-
-                document.getElementById('seek-slider').value = data.number;
-           // }
-        }
-        else console.log("seeking, get perc pos aborted")
-    } catch (error) {
-        console.error('Error:', error);
-    }
-}
 
 //makeRequest();
