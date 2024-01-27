@@ -1,23 +1,40 @@
 
 build/
 models.v13.2.7z
-scripts/__pycache__/vsmlrt.cpython-38.pyc
+scripts _/__pycache__/vsmlrt.cpython-38.pyc
 stream/
-scripts/server/expr/node_modules/
-scripts/server/expr/videos/01.mp4
-scripts/server/expr/videos/dain.mp4
-scripts/server/hls2/public/logo192.png
-scripts/server/hls2/public/logo512.png
-scripts/server/express-hls-example/node_modules/
+scripts _/server/expr/node_modules/
+scripts _/server/expr/videos/01.mp4
+scripts _/server/expr/videos/dain.mp4
+scripts _/server/hls2/public/logo192.png
+scripts _/server/hls2/public/logo512.png
+scripts _/server/express-hls-example/node_modules/
 vapoursynth_r61_ubuntu_22.04/vapour/vapoursynth/
 vapoursynth_r61_ubuntu_22.04.2_colab_LTS.zip
-scripts/__pycache__/vsmlrt.cpython-311.pyc
+scripts _/__pycache__/vsmlrt.cpython-311.pyc
 output.avi
 test.mp4
-scripts/server/bin_test/node_modules/
-scripts/server/bin_test/hello.exe
-scripts/server/bin_test/sea-prep.blob
-scripts/server/bin_test/server-out.js
-scripts/server/express-hls-example/src/server-out.js
-scripts/server/express-hls-example/src/server.exe
-scripts/server/express-hls-example/src/sea-prep.blob
+scripts _/server/bin_test/node_modules/
+scripts _/server/bin_test/hello.exe
+scripts _/server/bin_test/sea-prep.blob
+scripts _/server/bin_test/server-out.js
+scripts _/server/express-hls-example/src/server-out.js
+scripts _/server/express-hls-example/src/server.exe
+scripts _/server/express-hls-example/src/sea-prep.blob
+scripts _/__pycache__/
+scripts _/chrome_extension/extension/extension.7z
+scripts _/Output/mysetup.exe
+scripts _/server/express-hls-example/src/0.bin
+scripts _/server/express-hls-example/src/1.bin
+scripts _/server/express-hls-example/src/3.bin
+scripts _/server/express-hls-example/src/2.bin
+scripts _/server/express-hls-example/src/5.bin
+scripts _/server/express-hls-example/src/4.bin
+scripts _/server/express-hls-example/src/-data.bin
+scripts _/server/express-hls-example/src/client.js
+scripts _/server/express-hls-example/src/client.zip
+scripts _/server/express-hls-example/src/data.bin
+scripts _/server/express-hls-example/src/public/_your_video.mkv
+scripts/__pycache__/vsmlrt.cpython-310.pyc
+data.bin
+scripts _/chrome_extension/extension/RifePlayer/build.7z
