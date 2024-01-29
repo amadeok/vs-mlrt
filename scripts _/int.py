@@ -2,7 +2,7 @@
 import sys, os;
 RIFE_PLAYER_MLRT_SCRIPT_PATH =  os.getenv("RIFE_PLAYER_MLRT_SCRIPT_PATH")
 sys.path+=[RIFE_PLAYER_MLRT_SCRIPT_PATH]
-import time, vapoursynth as vs, fractions, configparser
+import time, vapoursynth as vs, fractions, configparser, threading
 from vsmlrt import RIFE, RIFEModel, Backend
 def mult32(number):  return  ((number + 31) // 32) * 32
 tw = 1280; th =720; autoscale = False
@@ -21,6 +21,18 @@ def pad_to_multiple_of_32(clip):
     return [clip.std.AddBorders(pad_left, pad_right, pad_top, pad_bottom), [pad_left, pad_right, pad_top, pad_bottom]]
 
 
+
+
+appdata_dir = os.getenv('APPDATA')
+
+file_path = os.path.join(appdata_dir, 'Rife Player//RIFE_PLAYER_SCRIPT_STATUS.txt')
+def funvar():
+    while 1:
+        with open(file_path, "w+") as ff:
+            ff.write("")
+        time.sleep(1)
+        
+threading.Thread(target=funvar).start()
 clip = video_in
 print("Vapoursynth input format: ", clip.format)
 print("Python Path:")
@@ -111,6 +123,20 @@ try:
         output_num, output_den = fps_fraction.numerator, fps_fraction.denominator
 
         print("NEW FRAMERATE", container_fps, " -> ",  fps, " : ", output_num,  "/", output_den)
+        
+        # target_fps_num = 60
+        # target_fps_den = 1
+        # import math, functools
+        # clip = core.std.AssumeFPS(clip, fpsnum=23999, fpsden=1000)
+
+        # def frame_adjuster(n, clip, target_fps_num, target_fps_den):
+        #     real_n = math.floor(n / (target_fps_num / target_fps_den * clip.fps_den / clip.fps_num))
+        #     one_frame_clip = clip[real_n] * (len(clip) + 100)
+        #     return one_frame_clip
+
+        # attribute_clip = core.std.BlankClip(clip, length=math.floor(len(clip) * target_fps_num / target_fps_den * clip.fps_den / clip.fps_num), fpsnum=target_fps_num, fpsden=target_fps_den)
+        # adjusted_clip = core.std.FrameEval(attribute_clip, functools.partial(frame_adjuster, clip=clip, target_fps_num=target_fps_num, target_fps_den=target_fps_den))
+        # adjusted_clip.set_output()
 
         #clip = core.std.AssumeFPS(clip, fpsnum=output_num, fpsden=output_den)
         #clip = core.std.AssumeFPS(clip, fpsnum=output_num, fpsden=output_den) GIVES WRONG FPS ON COLAB
@@ -143,5 +169,21 @@ except Exception as e:
     #     print(e)
     print( errormsg)
     clip.set_output()
+
+
+
+appdata_dir = os.getenv('APPDATA')
+
+file_path = os.path.join(appdata_dir, 'Rife Player//RIFE_PLAYER_SCRIPT_STATUS.txt')
+if os.path.exists(file_path):
+    # Delete the file
+    os.remove(file_path)
+    print(f"{file_path} has been deleted.")
+else:
+    print(f"{file_path} does not exist.")
+
+print( "RIFE_PLAYER_SCRIPT_STATUS deleted")
+
+
 
 

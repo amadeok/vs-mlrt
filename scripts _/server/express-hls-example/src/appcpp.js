@@ -115,6 +115,7 @@ let streamArgs = [
 let player = null;
 let latestSSegment = null;
 let latestCSegment = 0;
+let latestDeletedSegment = 0;
 let latestSSegmentInt = null;
 let timerPauseTimeout = null;
 let clientPos = null;
@@ -125,7 +126,26 @@ function generateUniqueId() {
     return '_' + Math.random().toString(36).substr(2, 9);
 }
 
-
+function deleteFilesInFolder(folderPath) {
+    fs.readdir(folderPath, (err, files) => {
+      if (err) {
+        console.error('Error reading directory:', err);
+        return;
+      }
+  
+      files.forEach(file => {
+        const filePath = path.join(folderPath, file);
+        fs.unlink(filePath, err => {
+          if (err) {
+            console.error('Error deleting file:', err);
+            return;
+          }
+          console.log('Deleted file:', filePath);
+        });
+      });
+    });
+  }
+  
 
 class WebSocketClient {
     constructor(host) {
@@ -223,7 +243,11 @@ class WebSocketClient {
                             console.log("New play session: ", playSessionId, " mirroring mode: ", mirroringMode);
                             latestCSegment = 0;
                             latestSSegment = 0;
+                            latestDeletedSegment = 0;
                             responseCaches.clear();
+                            let path_ = path.join(streamPath + "stream");
+                            deleteFilesInFolder(path_)
+
                         }
                     }
                 }
@@ -701,10 +725,44 @@ function getLatestHLSSegment(folderPath) {
     // });
     // return latestSSegment;
 }
+function formatFileName(number, totalDigits) {
+    return `str${String(number).padStart(totalDigits, '0')}.ts`;
+}
+
+function deleteOldSeg() {
+    streamPath = recvVariables["stream_files_path"];
+    let segmentBufferN = recvVariables["segment_buf_N"];
+
+    if (streamPath && latestSSegment && latestSSegment > segmentBufferN+1) {
+        let deleteN = latestSSegment - segmentBufferN *3;
+        for (; latestDeletedSegment < deleteN; latestDeletedSegment++) {
+            //deleteN = latestDeletedSegment;
+            let filePath = path.join(streamPath + "//stream", formatFileName(latestDeletedSegment, 6));
+
+            fs.access(filePath, fs.constants.F_OK, function (err) {
+                if (err) { } else {
+
+                    fs.unlink(filePath, (err) => {
+                        if (err) { console.error('Error deleting file:', err); } // 
+                        else {
+                            // if (deleteN > latestDeletedSegment) {
+                            //     latestDeletedSegment = Math.min(latestDeletedSegment, deleteN);
+                            // }
+                            console.log('---> Deleted file:', filePath);
+
+                        }
+
+                    });
+                }
+            });
+        }
+    }
+}
 
 function getLatestHLSSegmentF() {
     //let latestsegment = getLatestHLSSement(streamPath);
     //  console.log("getlatest")
+    deleteOldSeg();
     streamPath = recvVariables["stream_files_path"];
     let segmentBufferN  = recvVariables["segment_buf_N"];
     assert(recvVariables["segment_buf_N"] != null);
@@ -961,6 +1019,7 @@ app.get('/mpv-play-file', (req, res) => {
     let streamPath = recvVariables["stream_files_path"];
     latestSSegment = 0;
     latestCSegment = 0;
+    latestDeletedSegment = 0;
     const file_path = path.join(recvVariables["network_folder"], file);
     console.log('\n ---> Requested file:', file_path, " ; useTCP ", useTCP, " <---\n");
     if (fs.existsSync(file_path)) {
@@ -1444,44 +1503,51 @@ new hls(server, {
             if (ext !== 'm3u8' && ext !== 'ts') {
                 return cb(null, true);
             }
-            let last = false;
+            let last = false, number, deletedError = false;
             if (ext == 'ts') {
                 const regex = /(\d+)/;
                 const numberS = req.url.match(regex)[0];
-                const number = parseInt(numberS, 10);
+                number = parseInt(numberS, 10);
+                if (number <= latestDeletedSegment) {
+                    deletedError = true;
+                }
                 //console.log("numer ", number, " latestCSegment ", latestCSegment, "numberS", numberS);
                 if (number > latestCSegment) {
                     latestCSegment = Math.min(latestSSegment, number);
                     last = true;
                 }
             }
+            if (number != 0 && deletedError) {
+                console.error("---------------------- > TRYING TO GET DELETED SEGMENT", number, " <= ", latestDeletedSegment, " | SS ", latestSSegment, " | CS", latestCSegment)
+                return cb(null, false, null);
+            } else {
 
-            console.log("GET received: " + req.url + (last ? "*" : ""))
+                console.log("GET received: " + req.url + (last ? "*" : ""))
 
-            waitForNotNull(streamPath)
-                .then(value => {
-                    let filePath = path.join(streamPath, req.url);
+                waitForNotNull(streamPath)
+                    .then(value => {
+                        let filePath = path.join(streamPath, req.url);
 
-                    fs.access(filePath, fs.constants.F_OK, function (err) {
-                        if (err) {
-                            console.log('File not exist');
+                        fs.access(filePath, fs.constants.F_OK, function (err) {
+                            if (err) {
+                                console.log('File not exist');
 
-                            checkFile2(filePath, 500, Infinity)
-                                .then((filePath) => {
-                                    console.log(`File ${filePath} exists now.`);
-                                    cb(null, true);
-                                })
-                                .catch((error) => {
-                                    console.error(error.message);
-                                    return cb(null, false);
-                                });
+                                checkFile2(filePath, 500, Infinity)
+                                    .then((filePath) => {
+                                        console.log(`File ${filePath} exists now.`);
+                                        cb(null, true);
+                                    })
+                                    .catch((error) => {
+                                        console.error(error.message);
+                                        return cb(null, false);
+                                    });
 
-                        } else
-                            cb(null, true, null);
+                            } else
+                                cb(null, true, null);
+                        });
                     });
-                });
 
-
+            }
         },
         getManifestStream: (req, cb) => {
             let filePath = path.join(streamPath, req.url ) ;

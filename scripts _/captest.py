@@ -1,6 +1,18 @@
 import os
 import time
 import keyboard
+
+
+from pymediainfo import MediaInfo
+
+f = r'https://rr1---sn-uxaxpu5ap5-jp5l.googlevideo.com/videoplayback?expire=1706475419&ei=O2u2ZabGBb-wi9oPveC3-AY&ip=87.19.65.221&id=o-AD83y0LlVwJxXl3h2xz9E1zPXRn4i6R4nzpbCJAvjYSj&itag=303&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&mh=z5&mm=31%2C29&mn=sn-uxaxpu5ap5-jp5l%2Csn-hpa7zns6&ms=au%2Crdu&mv=m&mvi=1&pl=24&initcwndbps=1408750&vprv=1&svpuc=1&mime=video%2Fwebm&gir=yes&clen=93107012&dur=804.383&lmt=1706437581949887&mt=1706453609&fvip=5&keepalive=yes&fexp=24007246&c=IOS&txp=5535434&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cvprv%2Csvpuc%2Cmime%2Cgir%2Cclen%2Cdur%2Clmt&sig=AJfQdSswRQIgGcIMtFuEEC-8vCi_rb0TmwrgLkCMmcbFT5BuqZdFynUCIQCuxI0FBF8D1GWJ1e8GWfkRLSJbxyF_OPIjionvYE85pA%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AAO5W4owRQIhAPELz_XSykgkek__l8daap0H1wtTUhoSTmqN35DkEcTiAiBFEZYppd_Kq_7R3uQo57SG1blSvRq0hFStuJP3nlxWDA%3D%3D'
+media_info = MediaInfo.parse(f)
+
+
+
+
+
+
 import vapoursynth
 from vapoursynth import core
 print(core.version())

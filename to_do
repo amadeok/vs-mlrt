@@ -1,0 +1,7 @@
+hiding consoles for release builds
+keep consoles from moving out of the screen on smaller screens
+hls clients not seeking to end on seek
+handle captureSleeptime better 
+handle pop window better so that they dont block for ever / consider that output is network
+handle Uncaught (in promise) DOMException: play() failed because the user didn't interact with the document first. with muted better, check if works
+handle scaling 
