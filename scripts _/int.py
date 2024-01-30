@@ -24,13 +24,16 @@ def pad_to_multiple_of_32(clip):
 
 
 appdata_dir = os.getenv('APPDATA')
-
+exit = 0
 file_path = os.path.join(appdata_dir, 'Rife Player//RIFE_PLAYER_SCRIPT_STATUS.txt')
 def funvar():
     while 1:
         with open(file_path, "w+") as ff:
             ff.write("")
         time.sleep(1)
+        if exit: 
+            print("writer fun ended")
+            break
         
 threading.Thread(target=funvar).start()
 clip = video_in
@@ -43,32 +46,27 @@ try:
     cMatrix = '709'
     cRange = 'limited'
     core = vs.core
-
-    disableInt = os.getenv("RIFE_PLAYER_DISABLE_INT")
-    print("Disable interpolation: ", disableInt)
+    multiplier = 2
+    envRPmult = os.getenv("RIFE_PLAYER_MULTIPLIER")
+    if envRPmult:
+        print("Using env variable RIFE_PLAYER_MULTIPLIER: ", envRPmult ) 
+        multiplier = int(envRPmult)
+    else:
+        print("End variable RIFE_PLAYER_MULTIPLIER not found, using default: ", multiplier ) 
+    disableInt = envRPmult == 1 #os.getenv("RIFE_PLAYER_DISABLE_INT")
+    print("Disable interpolation: ", disableInt, ",  RIFE_PLAYER_MULTIPLIER: ", envRPmult)
     if disableInt  and disableInt == "yes":
         clip.set_output()
     else:
-        multiplier = 2
-        envRPmult = os.getenv("RIFE_PLAYER_MULTIPLIER")
-        
-        if envRPmult:
-            print("Using env variable RIFE_PLAYER_MULTIPLIER: ", envRPmult ) 
-            multiplier = int(envRPmult)
-        else:
-            print("End variable RIFE_PLAYER_MULTIPLIER not found, using default: ", multiplier ) 
+
         try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
         except Exception as e: 
             print(e)
-        try:
-            cFormat = eval('vs.' + clip.format.name)
-        except:
-            cFormat = vs.YUV420P8
+        try:   cFormat = eval('vs.' + clip.format.name)
+        except:   cFormat = vs.YUV420P8
 
-        try:
-            cFamily = str(clip.format.color_family)
-        except:
-            cFamily = 'ColorFamily.YUV'
+        try:   cFamily = str(clip.format.color_family)
+        except:  cFamily = 'ColorFamily.YUV'
 
         #print("-----> clip bps1 ", clip[0].format.bits_per_sample )
         # if cFamily == 'ColorFamily.RGB':
@@ -183,6 +181,7 @@ else:
     print(f"{file_path} does not exist.")
 
 print( "RIFE_PLAYER_SCRIPT_STATUS deleted")
+exit = 1
 
 
 

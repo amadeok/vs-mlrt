@@ -245,8 +245,8 @@ class WebSocketClient {
                             latestSSegment = 0;
                             latestDeletedSegment = 0;
                             responseCaches.clear();
-                            let path_ = path.join(streamPath + "stream");
-                            deleteFilesInFolder(path_)
+                           // let path_ = path.join(streamPath, "stream");
+                           // deleteFilesInFolder(path_)
 
                         }
                     }
@@ -766,7 +766,7 @@ function getLatestHLSSegmentF() {
     streamPath = recvVariables["stream_files_path"];
     let segmentBufferN  = recvVariables["segment_buf_N"];
     assert(recvVariables["segment_buf_N"] != null);
-    let playlistFile = streamPath + '/stream/out.m3u8';
+    let playlistFile = streamPath + '//stream//out.m3u8';
     if (bIsRemotePaused.type !== "pauseQueued")
         fs.access(playlistFile, fs.constants.F_OK, (err) => {
             if (err) {

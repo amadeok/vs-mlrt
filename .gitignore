@@ -38,3 +38,4 @@ scripts _/server/express-hls-example/src/public/_your_video.mkv
 scripts/__pycache__/vsmlrt.cpython-310.pyc
 data.bin
 scripts _/chrome_extension/extension/RifePlayer/build.7z
+scripts _/rifef_.exe
