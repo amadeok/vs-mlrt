@@ -24,18 +24,24 @@ def pad_to_multiple_of_32(clip):
 
 
 appdata_dir = os.getenv('APPDATA')
-exit = 0
+class context():
+    def __init__(self) -> None:
+        self.exit = 0
+
+ctx = context()
+
 file_path = os.path.join(appdata_dir, 'Rife Player//RIFE_PLAYER_SCRIPT_STATUS.txt')
-def funvar():
+
+def funvar(ctx_):
     while 1:
         with open(file_path, "w+") as ff:
             ff.write("")
         time.sleep(1)
-        if exit: 
+        if ctx_.exit: 
             print("writer fun ended")
             break
         
-threading.Thread(target=funvar).start()
+threading.Thread(target=funvar, args=(ctx,)).start()
 clip = video_in
 print("Vapoursynth input format: ", clip.format)
 print("Python Path:")
@@ -115,12 +121,13 @@ try:
             pass
 
         clip = core.resize.Bicubic(clip,  format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
-
+        # clip = core.resize.Bicubic(clip,  matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
+        
         #clip = vs.core.std.AddBorders(clip,  right=left, bottom=top )  
         fps_fraction = fractions.Fraction(container_fps * multiplier).limit_denominator()
         output_num, output_den = fps_fraction.numerator, fps_fraction.denominator
 
-        print("NEW FRAMERATE", container_fps, " -> ",  fps, " : ", output_num,  "/", output_den)
+        print("NEW FRAMERATE", container_fps, " -> ",  fps, " : ", output_num,  "/", output_den, " / ", clip.format)
         
         # target_fps_num = 60
         # target_fps_den = 1
@@ -181,7 +188,7 @@ else:
     print(f"{file_path} does not exist.")
 
 print( "RIFE_PLAYER_SCRIPT_STATUS deleted")
-exit = 1
+ctx.exit = 1
 
 
 
