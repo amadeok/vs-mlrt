@@ -1,4 +1,4 @@
-__version__ = "3.15.25"
+__version__ = "3.22.7"
 
 __all__ = [
     "Backend", "BackendV2",
@@ -8,85 +8,80 @@ __all__ = [
     "RealESRGANv2", "RealESRGANv2Model",
     "CUGAN",
     "RIFE", "RIFEModel", "RIFEMerge",
-    "inference"
+    "SAFA", "SAFAModel", "SAFAAdaptiveMode",
+    "SCUNet", "SCUNetModel",
+    "SwinIR", "SwinIRModel",
+    "ArtCNN", "ArtCNNModel",
+    "inference",
+    "flexible_inference"
 ]
 
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import enum
+from fractions import Fraction
 import math
 import os
+import os.path
+import platform
 import subprocess
 import sys
 import tempfile
 import time
 import typing
 import zlib
-import pyautogui
 
-print(sys.path)
 import vapoursynth as vs
 from vapoursynth import core
-trtpath = ""
+sys.path.append( os.path.dirname(os.path.abspath(__file__)))
+import utils__
+trtpath = utils__.get_trt_path()
 
-
-got_trt_dll_path = os.getenv( "RIFE_PLAYER_TRT_DLL_PATH")
-RIFE_PLAYER_ROOT_PATH = os.getenv( "RIFE_PLAYER_ROOT_PATH")
-
-if got_trt_dll_path:
-    print("'RIFE_PLAYER_TRT_DLL_PATH' variable found")
-    trtpath = got_trt_dll_path
-else:
-    print("Getting vstrt.dll path from file")
-    if os.path.isfile("trt_dll_path.txt"):
-        with open("trt_dll_path.txt", 'r') as file:
-            path = file.read()
-            if os.path.isfile(path):
-                trtpath = path
-if trtpath == "":
-    pyautogui.alert('Error: failed to found vstrt.dll', 'vstrt.dll NOT found ')
-
-
-    # if sys.platform.startswith('linux'):
-    #     if os.path.isfile("/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"):
-    #         trtpath = "/home/amadeok/vs-mlrt/vstrt/build/libvstrt.so"
-    #     elif os.path.isfile("/content/drive/MyDrive/rifef/libvstrt.so"):
-    #         trtpath = "/content/drive/MyDrive/rifef/libvstrt.so"
-    # elif sys.platform.startswith('win'):
-    #     trtpath= r"E:\Users\amade\rifef\VSTRT\test123\vstrt.dll"
-    
-
-core.std.LoadPlugin(path=trtpath)
-# with open(RIFE_PLAYER_ROOT_PATH+ "\\trt_dll_path.txt", 'w+') as file:
-#     path = file.write(trtpath)
 
 def get_plugins_path() -> str:
     path = b""
 
     try:
-        path = core.trt.Version()["path"]
+        path = core.ov.Version()["path"]
     except AttributeError:
+        pass
+
+    if path == b"":
         try:
             path = core.ort.Version()["path"]
         except AttributeError:
-            try:
-                path = core.ov.Version()["path"]
-            except AttributeError:
-                path = core.ncnn.Version()["path"]
+            pass
 
-    assert path != b""
+    if path == b"":
+        try:
+            path = core.ncnn.Version()["path"]
+        except AttributeError:
+            pass
+
+    if path == b"":
+        try:
+            path = core.trt.Version()["path"]
+        except AttributeError:
+            pass
+
+    if path == b"":
+        try:
+            path = core.migx.Version()["path"]
+        except AttributeError:
+            pass
+
+    if path == b"":
+        raise RuntimeError("vsmlrt: cannot load any filters")
 
     return os.path.dirname(path).decode()
 
+
 plugins_path: str = get_plugins_path()
-trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec.exe") if sys.platform.startswith('win') else  "/usr/src/tensorrt/bin/trtexec" #os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
-assert (os.path.isfile(trtexec_path))
+trtexec_path: str = os.path.join(plugins_path, "vsmlrt-cuda", "trtexec")
+migraphx_driver_path: str = os.path.join(plugins_path, "vsmlrt-hip", "migraphx-driver")
 models_path: str = os.path.join(plugins_path, "models")
-inColab = False
-if os.path.isdir("/content/drive/MyDrive/rifef/models"):
-    models_path: str = os.path.join(plugins_path, "models")
-    inColab = True
-    #trtexec_path: str =  "LD_LIBRARY_PATH='/usr/lib64-nvidia' /usr/src/tensorrt/bin/trtexec"
+
+print("----------------------->", plugins_path, trtexec_path, models_path)
 
 class Backend:
     @dataclass(frozen=False)
@@ -107,6 +102,18 @@ class Backend:
 
         basic performance tuning:
         set fp16 = True (on RTX GPUs)
+
+        Semantics of `fp16`:
+            Enabling `fp16` will use a built-in quantization that converts a fp32 onnx to a fp16 onnx.
+            If the input video is of half-precision floating-point format,
+            the generated fp16 onnx will use fp16 input.
+            The output format can be controlled by the `output_format` option (0 = fp32, 1 = fp16).
+
+            Disabling `fp16` will not use the built-in quantization.
+            However, if the onnx file itself uses fp16 for computation,
+            the actual computation will be done in fp16.
+            In this case, the input video format should match the input format of the onnx,
+            and the output format is inferred from the onnx.
         """
 
         device_id: int = 0
@@ -116,6 +123,9 @@ class Backend:
         fp16: bool = False
         use_cuda_graph: bool = False # preview, not supported by all models
         fp16_blacklist_ops: typing.Optional[typing.Sequence[str]] = None
+        prefer_nhwc: bool = False
+        output_format: int = 0 # 0: fp32, 1: fp16
+        tf32: bool = False
 
         # internal backend attributes
         supports_onnx_serialization: bool = True
@@ -154,17 +164,17 @@ class Backend:
         opt_shapes: typing.Optional[typing.Tuple[int, int]] = None
         fp16: bool = False
         device_id: int = 0
-        workspace: typing.Optional[int] = 128
+        workspace: typing.Optional[int] = None
         verbose: bool = False
         use_cuda_graph: bool = False
         num_streams: int = 1
         use_cublas: bool = False # cuBLAS + cuBLASLt
         static_shape: bool = True
-        tf32: bool = True
+        tf32: bool = False
         log: bool = True
 
         # as of TensorRT 8.4, it can be turned off without performance penalty in most cases
-        use_cudnn: bool = True
+        use_cudnn: bool = False # changed to False since vsmlrt.vpy 3.16
         use_edge_mask_convolutions: bool = True
         use_jit_convolutions: bool = True
         heuristic: bool = False # only supported on Ampere+ with TensorRT 8.5+
@@ -173,6 +183,13 @@ class Backend:
         faster_dynamic_shapes: bool = True
         force_fp16: bool = False
         builder_optimization_level: int = 3
+        max_aux_streams: typing.Optional[int] = None
+        short_path: typing.Optional[bool] = None # True on Windows by default, False otherwise
+        bf16: bool = False
+        custom_env: typing.Dict[str, str] = field(default_factory=lambda: {})
+        custom_args: typing.List[str] = field(default_factory=lambda: [])
+        engine_folder: typing.Optional[str] = None
+        max_tactics: typing.Optional[int] = None
 
         # internal backend attributes
         supports_onnx_serialization: bool = False
@@ -223,6 +240,46 @@ class Backend:
         # internal backend attributes
         supports_onnx_serialization: bool = True
 
+    @dataclass(frozen=False)
+    class MIGX:
+        """ backend for amd gpus
+
+        basic performance tuning:
+        set fp16 = True
+        """
+
+        device_id: int = 0
+        fp16: bool = False
+        opt_shapes: typing.Optional[typing.Tuple[int, int]] = None
+        fast_math: bool = True
+        exhaustive_tune: bool = False
+
+        short_path: typing.Optional[bool] = None # True on Windows by default, False otherwise
+        custom_env: typing.Dict[str, str] = field(default_factory=lambda: {})
+        custom_args: typing.List[str] = field(default_factory=lambda: [])
+
+        # internal backend attributes
+        supports_onnx_serialization: bool = False
+
+    @dataclass(frozen=False)
+    class OV_NPU:
+        """ backend for intel npus
+        """
+
+        # internal backend attributes
+        supports_onnx_serialization: bool = True
+
+    @dataclass(frozen=False)
+    class ORT_COREML:
+        """ backend for coreml """
+        num_streams: int = 1
+        verbosity: int = 0
+        fp16: bool = False
+        fp16_blacklist_ops: typing.Optional[typing.Sequence[str]] = None
+
+        # internal backend attributes
+        supports_onnx_serialization: bool = True
+
 
 backendT = typing.Union[
     Backend.OV_CPU,
@@ -232,6 +289,9 @@ backendT = typing.Union[
     Backend.OV_GPU,
     Backend.NCNN_VK,
     Backend.ORT_DML,
+    Backend.MIGX,
+    Backend.OV_NPU,
+    Backend.ORT_COREML,
 ]
 
 
@@ -260,7 +320,7 @@ def Waifu2x(
     tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
-    model: typing.Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9] = 6,
+    model: Waifu2xModel = Waifu2xModel.cunet,
     backend: backendT = Backend.OV_CPU(),
     preprocess: bool = True
 ) -> vs.VideoNode:
@@ -280,7 +340,7 @@ def Waifu2x(
         raise ValueError(f'{func_name}: "scale" must be 1, 2 or 4')
 
     if not isinstance(model, int) or model not in Waifu2xModel.__members__.values():
-        raise ValueError(f'{func_name}: "model" must be in [0, 9]')
+        raise ValueError(f'{func_name}: invalid "model"')
 
     if model == 0 and noise == 0:
         raise ValueError(
@@ -429,7 +489,7 @@ def DPIR(
     tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
-    model: typing.Literal[0, 1, 2, 3] = 0,
+    model: DPIRModel = DPIRModel.drunet_gray,
     backend: backendT = Backend.OV_CPU()
 ) -> vs.VideoNode:
 
@@ -442,7 +502,7 @@ def DPIR(
         raise ValueError(f"{func_name}: only constant format 16/32 bit float input supported")
 
     if not isinstance(model, int) or model not in DPIRModel.__members__.values():
-        raise ValueError(f'{func_name}: "model" must be 0, 1, 2 or 3')
+        raise ValueError(f'{func_name}: invalid "model"')
 
     if model in [0, 2] and clip.format.color_family != vs.GRAY:
         raise ValueError(f'{func_name}: "clip" must be of GRAY color family')
@@ -498,6 +558,12 @@ def DPIR(
         trt_opt_shapes=(tile_w, tile_h)
     )
 
+    if isinstance(backend, Backend.TRT) and not backend.force_fp16:
+        backend.custom_args.extend([
+            "--precisionConstraints=obey",
+            "--layerPrecisions=Conv_123:fp32"
+        ])
+
     network_path = os.path.join(
         models_path,
         "dpir",
@@ -520,10 +586,17 @@ class RealESRGANModel(enum.IntEnum):
     animevideo_xsx4 = 1
     # v3
     animevideov3 = 2 # 4x
-    # contributed: janaiV2(2x) https://github.com/the-database/mpv-upscale-2x_animejanai/releases/tag/2.0.0 maintainer: hooke007 
+    # contributed: janaiV2(2x) https://github.com/the-database/mpv-upscale-2x_animejanai/releases/tag/2.0.0 maintainer: hooke007
     animejanaiV2L1 = 5005
     animejanaiV2L2 = 5006
     animejanaiV2L3 = 5007
+    # contributed: janaiV3-hd(2x) https://github.com/the-database/mpv-upscale-2x_animejanai/releases/tag/3.0.0 maintainer: hooke007
+    animejanaiV3_HD_L1 = 5008
+    animejanaiV3_HD_L2 = 5009
+    animejanaiV3_HD_L3 = 5010
+    # contributed=Ani4K-v2 https://github.com/Sirosky/Upscale-Hub/releases/tag/Ani4K-v2
+    Ani4Kv2_G6i2_Compact = 7000
+    Ani4Kv2_G6i2_UltraCompact = 7001
 
 RealESRGANv2Model = RealESRGANModel
 
@@ -533,7 +606,7 @@ def RealESRGAN(
     tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
-    model: RealESRGANv2Model = 0,
+    model: RealESRGANv2Model = RealESRGANv2Model.animevideo_xsx2,
     backend: backendT = Backend.OV_CPU(),
     scale: typing.Optional[float] = None
 ) -> vs.VideoNode:
@@ -585,7 +658,7 @@ def RealESRGAN(
             "RealESRGANv2",
             "realesr-animevideov3.onnx"
         )
-    elif model in [5005, 5006, 5007]:
+    elif model in [5005, 5006, 5007, 5008, 5009, 5010, 7000, 7001]:
         network_path = os.path.join(
             models_path,
             "RealESRGANv2",
@@ -626,7 +699,6 @@ def CUGAN(
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     backend: backendT = Backend.OV_CPU(),
-    preprocess: bool = True,
     alpha: float = 1.0,
     version: typing.Literal[1, 2] = 1, # 1: legacy, 2: pro
     conformance: bool = True # currently specifies dynamic range compression for cugan-pro
@@ -670,8 +742,6 @@ def CUGAN(
         overlap_w, overlap_h = overlap
 
     multiple = 2
-
-    width, height = clip.width, clip.height
 
     (tile_w, tile_h), (overlap_w, overlap_h) = calc_tilesize(
         tiles=tiles, tilesize=tilesize,
@@ -840,6 +910,10 @@ def get_rife_input(clip: vs.VideoNode) -> typing.List[vs.VideoNode]:
 
 @enum.unique
 class RIFEModel(enum.IntEnum):
+    """
+    Starting from RIFE v4.12 lite, this interface does not provide forward compatiblity in enum values.
+    """
+
     v4_0 = 40
     v4_2 = 42
     v4_3 = 43
@@ -847,6 +921,33 @@ class RIFEModel(enum.IntEnum):
     v4_5 = 45
     v4_6 = 46
     v4_7 = 47
+    v4_8 = 48
+    v4_9 = 49
+    v4_10 = 410
+    v4_11 = 411
+    v4_12 = 412
+    v4_12_lite = 4121
+    v4_13 = 413
+    v4_13_lite = 4131
+    v4_14 = 414
+    v4_14_lite = 4141
+    v4_15 = 415
+    v4_15_lite = 4151
+    v4_16_lite = 4161
+    v4_17 = 417
+    v4_17_lite = 4171
+    v4_18 = 418
+    v4_19 = 419
+    v4_20 = 420
+    v4_21 = 421
+    v4_22 = 422
+    v4_22_lite = 4221
+    v4_23 = 423
+    v4_24 = 424
+    v4_25 = 425
+    v4_25_lite = 4251
+    v4_25_heavy = 4252
+    v4_26 = 426
 
 
 def RIFEMerge(
@@ -857,7 +958,7 @@ def RIFEMerge(
     tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
-    model: typing.Literal[40, 42, 43, 44, 45, 46] = 44,
+    model: RIFEModel = RIFEModel.v4_4,
     backend: backendT = Backend.OV_CPU(),
     ensemble: bool = False,
     _implementation: typing.Optional[typing.Literal[1, 2]] = None
@@ -868,8 +969,6 @@ def RIFEMerge(
     except that it merges the two clips in the time domain and you specify the "mask" based
     on the time point of the resulting clip (range (0,1)) between the two clips.
     """
-
-    from fractions import Fraction
 
     func_name = "vsmlrt.RIFEMerge"
 
@@ -903,19 +1002,43 @@ def RIFEMerge(
     else:
         overlap_w, overlap_h = overlap
 
-    multiple_frac = 32 / Fraction(scale)
+    model_major = int(str(int(model))[0])
+    model_minor = int(str(int(model))[1:3])
+    if len(str(int(model))) >= 4:
+        if str(int(model))[-1] == '1':
+            rife_type = "_lite"
+        elif str(int(model))[-1] == '2':
+            rife_type = "_heavy"
+    else:
+        rife_type = ""
+
+    if (model_major, model_minor) >= (4, 26):
+        tilesize_requirement = 64
+    elif (model_major, model_minor, rife_type) == (4, 25, "_lite"):
+        tilesize_requirement = 128
+    elif (model_major, model_minor, rife_type) == (4, 25, "_heavy"):
+        tilesize_requirement = 64
+    else:
+        tilesize_requirement = 32
+
+    multiple_frac = tilesize_requirement / Fraction(scale)
     if multiple_frac.denominator != 1:
-        raise ValueError(f'{func_name}: (32 / Fraction(scale)) must be an integer')
+        raise ValueError(f'{func_name}: ({tilesize_requirement} / Fraction(scale)) must be an integer')
     multiple = int(multiple_frac.numerator)
     scale = float(Fraction(scale))
 
-    if model >= 47 and (ensemble or scale != 1.0 or _implementation == 2):
+    if model_major == 4 and (model_minor in (21, 22, 23) or model_minor >= 25) and ensemble:
+        raise ValueError(f'{func_name}: ensemble is not supported')
+
+    version = f"v{model_major}.{model_minor}{rife_type}{'_ensemble' if ensemble else ''}"
+
+    if (model_major, model_minor) >= (4, 7) and scale != 1.0:
         raise ValueError("not supported")
 
     network_path = os.path.join(
         models_path,
         "rife_v2",
-        f"rife_v{model // 10}.{model % 10}{'_ensemble' if ensemble else ''}.onnx"
+        f"rife_{version}.onnx"
     )
     if _implementation == 2 and os.path.exists(network_path) and scale == 1.0:
         implementation_version = 2
@@ -927,7 +1050,7 @@ def RIFEMerge(
         network_path = os.path.join(
             models_path,
             "rife",
-            f"rife_v{model // 10}.{model % 10}{'_ensemble' if ensemble else ''}.onnx"
+            f"rife_{version}.onnx"
         )
 
         clips = [clipa, clipb, mask, *get_rife_input(clipa)]
@@ -948,6 +1071,29 @@ def RIFEMerge(
         backend=backend,
         trt_opt_shapes=(tile_w, tile_h)
     )
+
+    if implementation_version == 2:
+        if isinstance(backend, Backend.TRT):
+            # https://github.com/AmusementClub/vs-mlrt/issues/66#issuecomment-1791986979
+            if (4, 0) <= (model_major, model_minor):
+                if backend.force_fp16:
+                    backend.force_fp16 = False
+                    backend.fp16 = True
+
+                backend.custom_args.extend([
+                    "--precisionConstraints=obey",
+                    "--layerPrecisions=" + (
+                        "/Cast_2:fp32,/Cast_3:fp32,/Cast_5:fp32,/Cast_7:fp32,"
+                        "/Reciprocal:fp32,/Reciprocal_1:fp32,"
+                        "/Mul:fp32,/Mul_1:fp32,/Mul_8:fp32,/Mul_10:fp32,"
+                        "/Sub_5:fp32,/Sub_6:fp32,"
+                        # generated by TensorRT's onnx parser
+                        "ONNXTRT_Broadcast_236:fp32,ONNXTRT_Broadcast_238:fp32,"
+                        "ONNXTRT_Broadcast_273:fp32,ONNXTRT_Broadcast_275:fp32,"
+                        # TensorRT 9.0 or later
+                        "ONNXTRT_Broadcast_*:fp32"
+                    )
+                ])
 
     if scale == 1.0:
         return inference_with_fallback(
@@ -1014,14 +1160,15 @@ def RIFEMerge(
 
 def RIFE(
     clip: vs.VideoNode,
-    multi: int = 2,
+    multi: typing.Union[int, Fraction] = 2,
     scale: float = 1.0,
     tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
     overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
-    model: typing.Literal[40, 42, 43, 44, 45, 46] = 44,
+    model: RIFEModel = RIFEModel.v4_4,
     backend: backendT = Backend.OV_CPU(),
     ensemble: bool = False,
+    video_player: bool = False,
     _implementation: typing.Optional[typing.Literal[1, 2]] = None
 ) -> vs.VideoNode:
     """ RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation
@@ -1035,7 +1182,7 @@ def RIFE(
     and/or filter to achieve the best quality.
 
     Args:
-        multi: Multiple of the frame counts.
+        multi: Multiple of the frame counts, can be a fractions.Fraction.
             Default: 2.
 
         scale: Controls the process resolution for optical flow model.
@@ -1058,51 +1205,607 @@ def RIFE(
     if clip.format.color_family != vs.RGB:
         raise ValueError(f'{func_name}: "clip" must be of RGB color family')
 
-    if multi < 2:
-        raise ValueError(f'{func_name}: RIFE: multi must be at least 2')
+    if not isinstance(multi, (int, Fraction)):
+        raise TypeError(f'{func_name}: "multi" must be an integer or a fractions.Fraction!')
 
     if tiles is not None or tilesize is not None or overlap is not None:
         raise ValueError(f'{func_name}: tiling is not supported')
 
     gray_format = vs.GRAYS if clip.format.bits_per_sample == 32 else vs.GRAYH
 
-    initial = core.std.Interleave([clip] * (multi - 1))
+    if int(multi) == multi:
+        multi = int(multi)
 
-    terminal = clip.std.DuplicateFrames(frames=clip.num_frames - 1).std.Trim(first=1)
-    terminal = core.std.Interleave([terminal] * (multi - 1))
+        if multi < 2:
+            raise ValueError(f'{func_name}: RIFE: multi must be at least 2')
 
-    timepoint = core.std.Interleave([
-        clip.std.BlankClip(format=gray_format, color=i/multi, length=1)
-        for i in range(1, multi)
-    ]).std.Loop(clip.num_frames)
+        initial = core.std.Interleave([clip] * (multi - 1))
 
-    output0 = RIFEMerge(
-        clipa=initial, clipb=terminal, mask=timepoint,
-        scale=scale, tiles=tiles, tilesize=tilesize, overlap=overlap,
-        model=model, backend=backend, ensemble=ensemble,
-        _implementation=_implementation
+        terminal = clip.std.DuplicateFrames(frames=clip.num_frames - 1).std.Trim(first=1)
+        terminal = core.std.Interleave([terminal] * (multi - 1))
+
+        timepoint = core.std.Interleave([
+            clip.std.BlankClip(format=gray_format, color=i/multi, length=1)
+            for i in range(1, multi)
+        ]).std.Loop(clip.num_frames)
+
+        output0 = RIFEMerge(
+            clipa=initial, clipb=terminal, mask=timepoint,
+            scale=scale, tiles=tiles, tilesize=tilesize, overlap=overlap,
+            model=model, backend=backend, ensemble=ensemble,
+            _implementation=_implementation
+        )
+
+        clip = bits_as(clip, output0)
+        initial = core.std.Interleave([clip] * (multi - 1))
+
+        if hasattr(core, 'akarin') and hasattr(core.akarin, 'Select'):
+            output = core.akarin.Select([output0, initial], initial, 'x._SceneChangeNext 1 0 ?')
+        else:
+            def handler(n: int, f: vs.VideoFrame) -> vs.VideoNode:
+                if f.props.get('_SceneChangeNext'):
+                    return initial
+                return output0
+            output = core.std.FrameEval(output0, handler, initial)
+
+        if multi == 2:
+            res = core.std.Interleave([clip, output])
+        else:
+            res = core.std.Interleave([
+                clip,
+                *(output.std.SelectEvery(cycle=multi-1, offsets=i) for i in range(multi - 1))
+            ])
+
+        if clip.fps_num != 0 and clip.fps_den != 0:
+            return res.std.AssumeFPS(fpsnum = clip.fps_num * multi, fpsden = clip.fps_den)
+        else:
+            return res
+    else:
+        if not hasattr(core, 'akarin') or \
+            not hasattr(core.akarin, 'PropExpr') or \
+            not hasattr(core.akarin, 'PickFrames'):
+            raise RuntimeError(
+                'fractional multi requires plugin akarin '
+                '(https://github.com/AkarinVS/vapoursynth-plugin/releases)'
+                ', version v0.96g or later.')
+
+        if clip.fps_num == 0 or clip.fps_den == 0:
+            src_fps = Fraction(1)
+        else:
+            src_fps = clip.fps
+
+        dst_fps = src_fps * multi
+        src_frames = clip.num_frames
+        dst_frames = min(int(src_frames * multi), 2 ** 31 - 1)
+
+        duration_rel = src_fps / dst_fps
+        dst_duration = duration_rel.numerator
+        src_duration = duration_rel.denominator
+
+        # https://github.com/AmusementClub/vs-mlrt/issues/59#issuecomment-1842649342
+        if video_player:
+            temp = core.std.BlankClip(clip, length=dst_frames, keep=True)
+
+            def left_func(n: int) -> vs.VideoNode:
+                return clip[dst_duration * n // src_duration]
+            left_clip = core.std.FrameEval(temp, left_func)
+
+            def right_func(n: int) -> vs.VideoNode:
+                # no out of range access because of function filter_sc
+                return clip[dst_duration * n // src_duration + 1]
+            right_clip = core.std.FrameEval(temp, right_func)
+
+            temp_gray = core.std.BlankClip(temp, format=gray_format, keep=True)
+            def timepoint_func(n: int) -> vs.VideoNode:
+                current_time = dst_duration * n
+                left_index = current_time // src_duration
+                left_time = src_duration * left_index
+                tp = (current_time - left_time) / src_duration
+                return temp_gray.std.BlankClip(color=tp, keep=True)
+            tp_clip = core.std.FrameEval(temp_gray, timepoint_func)
+
+            output0 = RIFEMerge(
+                clipa=left_clip, clipb=right_clip, mask=tp_clip,
+                scale=scale, tiles=tiles, tilesize=tilesize, overlap=overlap,
+                model=model, backend=backend, ensemble=ensemble,
+                _implementation=_implementation
+            )
+
+            left0 = bits_as(left_clip, output0)
+
+            def filter_sc(n: int, f: vs.VideoFrame) -> vs.VideoNode:
+                current_time = dst_duration * n
+                left_index = current_time // src_duration
+                if (
+                    current_time % src_duration == 0 or
+                    left_index + 1 >= src_frames or
+                    f.props.get("_SceneChangeNext", False)
+                ):
+                    return left0
+                else:
+                    return output0
+
+            res = core.std.FrameEval(output0, filter_sc, left0)
+        else:
+            if not hasattr(core, 'akarin') or \
+                not hasattr(core.akarin, 'PropExpr') or \
+                not hasattr(core.akarin, 'PickFrames'):
+                raise RuntimeError(
+                    'fractional multi requires plugin akarin '
+                    '(https://github.com/AkarinVS/vapoursynth-plugin/releases)'
+                    ', version v0.96g or later.')
+
+            left_indices = []
+            right_indices = []
+            timepoints = []
+            output_indices = []
+
+            for i in range(dst_frames):
+                current_time = dst_duration * i
+                if current_time % src_duration == 0:
+                    output_indices.append(current_time // src_duration)
+                else:
+                    left_index = current_time // src_duration
+                    if left_index + 1 >= src_frames:
+                        # approximate last frame with last frame of source
+                        output_indices.append(src_frames - 1)
+                        break
+                    output_indices.append(src_frames + len(timepoints))
+                    left_indices.append(left_index)
+                    right_indices.append(left_index + 1)
+                    left_time = src_duration * left_index
+                    tp = (current_time - left_time) / src_duration
+                    timepoints.append(tp)
+
+            left_clip = core.akarin.PickFrames(clip, left_indices)
+            right_clip = core.akarin.PickFrames(clip, right_indices)
+            tp_clip = core.std.BlankClip(clip, format=gray_format, length=len(timepoints))
+            tp_clip = tp_clip.akarin.PropExpr(lambda: dict(_tp=timepoints)).akarin.Expr('x._tp')
+
+            output0 = RIFEMerge(
+                clipa=left_clip, clipb=right_clip, mask=tp_clip,
+                scale=scale, tiles=tiles, tilesize=tilesize, overlap=overlap,
+                model=model, backend=backend, ensemble=ensemble,
+                _implementation=_implementation
+            )
+
+            clip0 = bits_as(clip, output0)
+            left0 = bits_as(left_clip, output0)
+            output = core.akarin.Select([output0, left0], left0, 'x._SceneChangeNext 1 0 ?')
+            res = core.akarin.PickFrames(clip0 + output, output_indices)
+
+        if clip.fps_num != 0 and clip.fps_den != 0:
+            return res.std.AssumeFPS(fpsnum = dst_fps.numerator, fpsden = dst_fps.denominator)
+        else:
+            return res
+
+
+@enum.unique
+class SAFAModel(enum.IntEnum):
+    v0_1 = 1
+    v0_2 = 2
+    v0_3 = 3
+    v0_4 = 4
+
+
+@enum.unique
+class SAFAAdaptiveMode(enum.IntEnum):
+    non_adaptive = 0 # non-adaptive
+    adaptive1x = 1 # use adaptive path only at 1x scale
+    adaptive = 2 # use adaptive path at 1x, 1/2x and 1/4x scales, proposed algorithm
+
+
+def SAFA(
+    clip: vs.VideoNode,
+    tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    model: SAFAModel = SAFAModel.v0_1,
+    adaptive: SAFAAdaptiveMode = SAFAAdaptiveMode.non_adaptive,
+    backend: backendT = Backend.OV_CPU(),
+) -> vs.VideoNode:
+    """ SAFA: Scale-Adaptive Feature Aggregation for Efficient Space-Time Video Super-Resolution
+    """
+
+    func_name = "vsmlrt.SAFA"
+
+    if not isinstance(clip, vs.VideoNode):
+        raise TypeError(f'{func_name}: "clip" must be a clip!')
+
+    if clip.format.sample_type != vs.FLOAT or clip.format.bits_per_sample not in [16, 32]:
+        raise ValueError(f"{func_name}: only constant format 16/32 bit float input supported")
+
+    if clip.format.color_family != vs.RGB:
+        raise ValueError(f'{func_name}: "clip" must be of RGB color family')
+
+    if clip.num_frames == 1:
+        raise ValueError(f'{func_name}: "clip" too short!')
+
+    if overlap is None:
+        overlap_w = overlap_h = 16
+    elif isinstance(overlap, int):
+        overlap_w = overlap_h = overlap
+    else:
+        overlap_w, overlap_h = overlap
+
+    # unknown crash
+    if model <= 2:
+        multiple = 8
+    else:
+        multiple = 16
+
+    (tile_w, tile_h), (overlap_w, overlap_h) = calc_tilesize(
+        tiles=tiles, tilesize=tilesize,
+        width=clip.width, height=clip.height,
+        multiple=multiple,
+        overlap_w=overlap_w, overlap_h=overlap_h
     )
 
-    clip = bits_as(clip, output0)
-    initial = core.std.Interleave([clip] * (multi - 1))
+    backend = init_backend(
+        backend=backend,
+        trt_opt_shapes=(tile_w, tile_h)
+    )
 
-    if hasattr(core, 'akarin') and hasattr(core.akarin, 'Select'):
-        output = core.akarin.Select([output0, initial], initial, 'x._SceneChangeNext 1 0 ?')
-    else:
-        def handler(n: int, f: vs.VideoFrame) -> vs.VideoNode:
-        #    print(dir(f.props), "\n", f.props.values)
-            if f.props.get('_SceneChangeNext'): #if true will not perform interpolation
-                return initial
-            return output0 #will perform interpolation
-        output = core.std.FrameEval(output0, handler, initial)
+    _adaptive = SAFAAdaptiveMode(adaptive)
 
-    if multi == 2:
-        return core.std.Interleave([clip, output])
-    else:
-        return core.std.Interleave([
-            clip,
-            *(output.std.SelectEvery(cycle=multi-1, offsets=i) for i in range(multi - 1))
+    if isinstance(backend, Backend.TRT):
+        if backend.force_fp16:
+            backend.force_fp16 = False
+            backend.fp16 = True
+
+        cast1, cast2 = [(218, 255), (266, 303), (254, 291)][_adaptive]
+
+        backend.custom_args.extend([
+            "--precisionConstraints=obey",
+            "--layerPrecisions=" + (
+                "/Div_2:fp32,/Div_3:fp32,/Div_4:fp32,/Div_5:fp32,/Div_6:fp32,/Div_7:fp32,"
+                "/Cast_7:fp32,/Cast_8:fp32,/Cast_10:fp32,/Cast_11:fp32,"
+                f"Cast_{cast1}:fp32,Cast_{cast2}:fp32,"
+                "/Sub_3:fp32,/Sub_4:fp32"
+            )
         ])
+
+    model_version = SAFAModel(model).name.replace('_', '.')
+    adaptive_string = _adaptive.name
+
+    network_path = os.path.join(
+        models_path,
+        "safa",
+        f"safa_{model_version}_{adaptive_string}.onnx"
+    )
+
+    clip_org = clip
+
+    clips = [clip[::2], clip[1::2]]
+    if clips[0].num_frames != clips[1].num_frames:
+        clips[1] = core.std.Splice([clips[1], clip[-1]])
+
+    clip2x = inference_with_fallback(
+        clips=clips, network_path=network_path,
+        overlap=(overlap_w, overlap_h), tilesize=(tile_w, tile_h),
+        backend=backend
+    )
+
+    up = core.std.Crop(clip2x, bottom=clip2x.height // 2)
+    down = core.std.Crop(clip2x, top=clip2x.height // 2)
+    clip = core.std.Interleave([up, down])
+
+    if clip.num_frames != clip_org.num_frames:
+        clip = clip[:-1]
+
+    return clip
+
+
+@enum.unique
+class SCUNetModel(enum.IntEnum):
+    scunet_color_15 = 0
+    scunet_color_25 = 1
+    scunet_color_50 = 2
+    scunet_color_real_psnr = 3
+    scunet_color_real_gan = 4
+    scunet_gray_15 = 5
+    scunet_gray_25 = 6
+    scunet_gray_50 = 7
+
+
+def SCUNet(
+    clip: vs.VideoNode,
+    tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    model: SCUNetModel = SCUNetModel.scunet_color_real_psnr,
+    backend: backendT = Backend.OV_CPU()
+) -> vs.VideoNode:
+    """ Practical Blind Denoising via Swin-Conv-UNet and Data Synthesis
+
+    Unlike vs-scunet v1.0.0, the default model is set to scunet_color_real_psnr due to the color shift.
+    """
+
+    func_name = "vsmlrt.SCUNet"
+
+    if not isinstance(clip, vs.VideoNode):
+        raise TypeError(f'{func_name}: "clip" must be a clip!')
+
+    if clip.format.sample_type != vs.FLOAT or clip.format.bits_per_sample not in [16, 32]:
+        raise ValueError(f"{func_name}: only constant format 16/32 bit float input supported")
+
+    if not isinstance(model, int) or model not in SCUNetModel.__members__.values():
+        raise ValueError(f'{func_name}: invalid "model"')
+
+    if model in range(5) and clip.format.color_family != vs.RGB:
+        raise ValueError(f'{func_name}: "clip" must be of RGB color family')
+    elif model in range(5, 8) and clip.format.color_family != vs.GRAY:
+        raise ValueError(f'{func_name}: "clip" must be of GRAY color family')
+
+    if overlap is None:
+        overlap_w = overlap_h = 16
+    elif isinstance(overlap, int):
+        overlap_w = overlap_h = overlap
+    else:
+        overlap_w, overlap_h = overlap
+
+    multiple = 1
+
+    (tile_w, tile_h), (overlap_w, overlap_h) = calc_tilesize(
+        tiles=tiles, tilesize=tilesize,
+        width=clip.width, height=clip.height,
+        multiple=multiple,
+        overlap_w=overlap_w, overlap_h=overlap_h
+    )
+
+    if tile_w % multiple != 0 or tile_h % multiple != 0:
+        raise ValueError(
+            f'{func_name}: tile size must be divisible by {multiple} ({tile_w}, {tile_h})'
+        )
+
+    backend = init_backend(
+        backend=backend,
+        trt_opt_shapes=(tile_w, tile_h)
+    )
+
+    network_path = os.path.join(
+        models_path,
+        "scunet",
+        f"{tuple(SCUNetModel.__members__)[model]}.onnx"
+    )
+
+    clip = inference_with_fallback(
+        clips=[clip], network_path=network_path,
+        overlap=(overlap_w, overlap_h), tilesize=(tile_w, tile_h),
+        backend=backend
+    )
+
+    return clip
+
+
+@enum.unique
+class SwinIRModel(enum.IntEnum):
+    lightweightSR_DIV2K_s64w8_SwinIR_S_x2 = 0
+    lightweightSR_DIV2K_s64w8_SwinIR_S_x3 = 1
+    lightweightSR_DIV2K_s64w8_SwinIR_S_x4 = 2
+    realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_x4_GAN = 3
+    # unused
+    realSR_BSRGAN_DFOWMFC_s64w8_SwinIR_L_x4_PSNR = 5
+    classicalSR_DF2K_s64w8_SwinIR_M_x2 = 6
+    classicalSR_DF2K_s64w8_SwinIR_M_x3 = 7
+    classicalSR_DF2K_s64w8_SwinIR_M_x4 = 8
+    classicalSR_DF2K_s64w8_SwinIR_M_x8 = 9
+    realSR_BSRGAN_DFO_s64w8_SwinIR_M_x2_GAN = 10
+    realSR_BSRGAN_DFO_s64w8_SwinIR_M_x2_PSNR = 11
+    realSR_BSRGAN_DFO_s64w8_SwinIR_M_x4_GAN = 12
+    realSR_BSRGAN_DFO_s64w8_SwinIR_M_x4_PSNR = 13
+    grayDN_DFWB_s128w8_SwinIR_M_noise15 = 14
+    grayDN_DFWB_s128w8_SwinIR_M_noise25 = 15
+    grayDN_DFWB_s128w8_SwinIR_M_noise50 = 16
+    colorDN_DFWB_s128w8_SwinIR_M_noise15 = 17
+    colorDN_DFWB_s128w8_SwinIR_M_noise25 = 18
+    colorDN_DFWB_s128w8_SwinIR_M_noise50 = 19
+    CAR_DFWB_s126w7_SwinIR_M_jpeg10 = 20
+    CAR_DFWB_s126w7_SwinIR_M_jpeg20 = 21
+    CAR_DFWB_s126w7_SwinIR_M_jpeg30 = 22
+    CAR_DFWB_s126w7_SwinIR_M_jpeg40 = 23
+    colorCAR_DFWB_s126w7_SwinIR_M_jpeg10 = 24
+    colorCAR_DFWB_s126w7_SwinIR_M_jpeg20 = 25
+    colorCAR_DFWB_s126w7_SwinIR_M_jpeg30 = 26
+    colorCAR_DFWB_s126w7_SwinIR_M_jpeg40 = 27
+
+
+def SwinIR(
+    clip: vs.VideoNode,
+    tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    model: SwinIRModel = SwinIRModel.lightweightSR_DIV2K_s64w8_SwinIR_S_x2,
+    backend: backendT = Backend.OV_CPU()
+) -> vs.VideoNode:
+    """ SwinIR: Image Restoration Using Swin Transformer """
+
+    func_name = "vsmlrt.SwinIR"
+
+    if not isinstance(clip, vs.VideoNode):
+        raise TypeError(f'{func_name}: "clip" must be a clip!')
+
+    if clip.format.sample_type != vs.FLOAT or clip.format.bits_per_sample not in [16, 32]:
+        raise ValueError(f"{func_name}: only constant format 16/32 bit float input supported")
+
+    if not isinstance(model, int) or model not in SwinIRModel.__members__.values():
+        raise ValueError(f'{func_name}: invalid "model"')
+
+    if model in range(14, 17) or model in range(20, 24):
+        if clip.format.color_family != vs.GRAY:
+            raise ValueError(f'{func_name}: "clip" must be of GRAY color family')
+    elif clip.format.color_family != vs.RGB:
+        raise ValueError(f'{func_name}: "clip" must be of RGB color family')
+
+    if overlap is None:
+        overlap_w = overlap_h = 16
+    elif isinstance(overlap, int):
+        overlap_w = overlap_h = overlap
+    else:
+        overlap_w, overlap_h = overlap
+
+    multiple = 1
+
+    (tile_w, tile_h), (overlap_w, overlap_h) = calc_tilesize(
+        tiles=tiles, tilesize=tilesize,
+        width=clip.width, height=clip.height,
+        multiple=multiple,
+        overlap_w=overlap_w, overlap_h=overlap_h
+    )
+
+    if tile_w % multiple != 0 or tile_h % multiple != 0:
+        raise ValueError(
+            f'{func_name}: tile size must be divisible by {multiple} ({tile_w}, {tile_h})'
+        )
+
+    backend = init_backend(
+        backend=backend,
+        trt_opt_shapes=(tile_w, tile_h)
+    )
+
+    if model < 4:
+        model_name = tuple(SwinIRModel.__members__)[model]
+    else:
+        model_name = tuple(SwinIRModel.__members__)[model - 1]
+
+    model_name = model_name.replace("SwinIR_", "SwinIR-")
+
+    if model in range(3):
+        model_name = f"002_{model_name}"
+    elif model in (3, 5):
+        model_name = f"003_{model_name}"
+    elif model in range(6, 10):
+        model_name = f"001_{model_name}"
+    elif model in range(10, 14):
+        model_name = f"003_{model_name}"
+    elif model in range(14, 17):
+        model_name = f"004_{model_name}"
+    elif model in range(17, 20):
+        model_name = f"005_{model_name}"
+    elif model in range(20, 28):
+        model_name = f"006_{model_name}"
+
+    network_path = os.path.join(
+        models_path,
+        "swinir",
+        f"{model_name}.onnx"
+    )
+
+    clip = inference_with_fallback(
+        clips=[clip], network_path=network_path,
+        overlap=(overlap_w, overlap_h), tilesize=(tile_w, tile_h),
+        backend=backend
+    )
+
+    return clip
+
+
+@enum.unique
+class ArtCNNModel(enum.IntEnum):
+    ArtCNN_C4F32 = 0 # deprecated
+    ArtCNN_C4F32_DS = 1 # deprecated
+    ArtCNN_C16F64 = 2
+    ArtCNN_C16F64_DS = 3
+    ArtCNN_C4F32_Chroma = 4 # deprecated
+    ArtCNN_C16F64_Chroma = 5
+    ArtCNN_R16F96 = 6
+    ArtCNN_R8F64 = 7
+    ArtCNN_R8F64_DS = 8
+    ArtCNN_R8F64_Chroma = 9
+
+
+def ArtCNN(
+    clip: vs.VideoNode,
+    tiles: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    tilesize: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    overlap: typing.Optional[typing.Union[int, typing.Tuple[int, int]]] = None,
+    model: ArtCNNModel = ArtCNNModel.ArtCNN_C16F64,
+    backend: backendT = Backend.OV_CPU()
+) -> vs.VideoNode:
+    """ ArtCNN (https://github.com/Artoriuz/ArtCNN) """
+
+    func_name = "vsmlrt.ArtCNN"
+
+    if not isinstance(clip, vs.VideoNode):
+        raise TypeError(f'{func_name}: "clip" must be a clip!')
+
+    if clip.format.sample_type != vs.FLOAT or clip.format.bits_per_sample not in [16, 32]:
+        raise ValueError(f"{func_name}: only constant format 16/32 bit float input supported")
+
+    if not isinstance(model, int) or model not in ArtCNNModel.__members__.values():
+        raise ValueError(f'{func_name}: invalid "model"')
+
+    if model in (4, 5, 9):
+        if clip.format.color_family != vs.YUV:
+            raise ValueError(f'{func_name}: "clip" must be of YUV color family')
+        if clip.format.subsampling_h != 0 or clip.format.subsampling_w != 0:
+            raise ValueError(
+                f'{func_name}: "clip" must be without subsampling! '
+                'Bilinear upsampling is recommended.'
+            )
+    elif clip.format.color_family != vs.GRAY:
+        raise ValueError(f'{func_name}: "clip" must be of GRAY color family')
+
+    if overlap is None:
+        overlap_w = overlap_h = 8
+    elif isinstance(overlap, int):
+        overlap_w = overlap_h = overlap
+    else:
+        overlap_w, overlap_h = overlap
+
+    multiple = 1
+
+    (tile_w, tile_h), (overlap_w, overlap_h) = calc_tilesize(
+        tiles=tiles, tilesize=tilesize,
+        width=clip.width, height=clip.height,
+        multiple=multiple,
+        overlap_w=overlap_w, overlap_h=overlap_h
+    )
+
+    if tile_w % multiple != 0 or tile_h % multiple != 0:
+        raise ValueError(
+            f'{func_name}: tile size must be divisible by {multiple} ({tile_w}, {tile_h})'
+        )
+
+    backend = init_backend(
+        backend=backend,
+        trt_opt_shapes=(tile_w, tile_h)
+    )
+
+    model_name = tuple(ArtCNNModel.__members__)[model]
+
+    network_path = os.path.join(
+        models_path,
+        "ArtCNN",
+        f"{model_name}.onnx"
+    )
+
+    if model in (4, 5, 9):
+        if clip.format.bits_per_sample == 16:
+            clip = core.akarin.Expr(clip, ["", "x 0.5 +"])
+        else:
+            clip = core.std.Expr(clip, ["", "x 0.5 +"])
+
+        clip_u, clip_v = flexible_inference_with_fallback(
+            clips=[clip], network_path=network_path,
+            overlap=(overlap_w, overlap_h), tilesize=(tile_w, tile_h),
+            backend=backend
+        )
+
+        clip = core.std.ShufflePlanes([clip, clip_u, clip_v], [0, 0, 0], vs.YUV)
+
+        if clip.format.bits_per_sample == 16:
+            clip = core.akarin.Expr(clip, ["", "x 0.5 -"])
+        else:
+            clip = core.std.Expr(clip, ["", "x 0.5 -"])
+    else:
+        clip = inference_with_fallback(
+            clips=[clip], network_path=network_path,
+            overlap=(overlap_w, overlap_h), tilesize=(tile_w, tile_h),
+            backend=backend
+        )
+
+    return clip
 
 
 def get_engine_path(
@@ -1118,7 +1821,12 @@ def get_engine_path(
     tf32: bool,
     use_cudnn: bool,
     input_format: int,
-    output_format: int
+    output_format: int,
+    builder_optimization_level: int,
+    max_aux_streams: typing.Optional[int],
+    short_path: typing.Optional[bool],
+    bf16: bool,
+    engine_folder: typing.Optional[str]
 ) -> str:
 
     with open(network_path, "rb") as file:
@@ -1133,29 +1841,53 @@ def get_engine_path(
         device_name = f"device{device_id}"
 
     if static_shape:
-        shape_str = f".{opt_shapes[0]}x{opt_shapes[1]}"
+        shape_str = f"{opt_shapes[0]}x{opt_shapes[1]}"
     else:
         shape_str = (
-            f".min{min_shapes[0]}x{min_shapes[1]}"
+            f"min{min_shapes[0]}x{min_shapes[1]}"
             f"_opt{opt_shapes[0]}x{opt_shapes[1]}"
             f"_max{max_shapes[0]}x{max_shapes[1]}"
         )
 
-    return (
-        network_path +
+    identity = (
         shape_str +
         ("_fp16" if fp16 else "") +
-        ("_no-tf32" if not tf32 else "") +
+        ("_tf32" if tf32 else "") +
+        ("_bf16" if bf16 else "") +
         (f"_workspace{workspace}" if workspace is not None else "") +
+        f"_opt{builder_optimization_level}" +
+        (f"_max-aux-streams{max_aux_streams}" if max_aux_streams is not None else "") +
         f"_trt-{trt_version}" +
         ("_cublas" if use_cublas else "") +
         ("_cudnn" if use_cudnn else "") +
         "_I-" + ("fp32" if input_format == 0 else "fp16") +
         "_O-" + ("fp32" if output_format == 0 else "fp16") +
         f"_{device_name}" +
-        f"_{checksum:x}" +
-        ".engine"
+        f"_{checksum:x}"
     )
+
+    dirname, basename = os.path.split(network_path)
+
+    if engine_folder is not None:
+        os.makedirs(engine_folder, exist_ok=True)
+        dirname = engine_folder
+
+    use_short_path = False
+
+    if short_path:
+        use_short_path = True
+    elif platform.system() == "Windows":
+        # use short path by default
+        if short_path is None:
+            use_short_path = True
+        # NTFS limitation
+        elif len(f"{basename}.{identity}.engine.cache.lock") >= 256:
+            use_short_path = True
+
+    if use_short_path:
+        return os.path.join(dirname, f"{zlib.crc32((f'{basename}.{identity}').encode()):x}.engine")
+    else:
+        return f"{os.path.join(dirname, basename)}.{identity}.engine"
 
 
 def trtexec(
@@ -1165,12 +1897,12 @@ def trtexec(
     max_shapes: typing.Tuple[int, int],
     fp16: bool,
     device_id: int,
-    workspace: typing.Optional[int] = 128,
+    workspace: typing.Optional[int] = None,
     verbose: bool = False,
     use_cuda_graph: bool = False,
     use_cublas: bool = False,
     static_shape: bool = True,
-    tf32: bool = True,
+    tf32: bool = False,
     log: bool = False,
     use_cudnn: bool = True,
     use_edge_mask_convolutions: bool = True,
@@ -1182,15 +1914,20 @@ def trtexec(
     min_shapes: typing.Tuple[int, int] = (0, 0),
     faster_dynamic_shapes: bool = True,
     force_fp16: bool = False,
-    builder_optimization_level: int = 3
+    builder_optimization_level: int = 3,
+    max_aux_streams: typing.Optional[int] = None,
+    short_path: typing.Optional[bool] = None,
+    bf16: bool = False,
+    custom_env: typing.Dict[str, str] = {},
+    custom_args: typing.List[str] = [],
+    engine_folder: typing.Optional[str] = None,
+    max_tactics: typing.Optional[int] = None
 ) -> str:
 
     if not hasattr(core, "trt"):
         core.std.LoadPlugin(path=trtpath)
-        #print("TRT Reloaded: ",  hasattr(core, "trt"))
-
-    # tensort runtime version, e.g. 8401 => 8.4.1
-    trt_version = int(core.trt.Version()["tensorrt_version"])
+    # tensort runtime version
+    trt_version = parse_trt_version(int(core.trt.Version()["tensorrt_version"]))
 
     if isinstance(opt_shapes, int):
         opt_shapes = (opt_shapes, opt_shapes)
@@ -1201,6 +1938,7 @@ def trtexec(
     if force_fp16:
         fp16 = True
         tf32 = False
+        bf16 = False
 
     engine_path = get_engine_path(
         network_path=network_path,
@@ -1215,19 +1953,26 @@ def trtexec(
         tf32=tf32,
         use_cudnn=use_cudnn,
         input_format=input_format,
-        output_format=output_format
+        output_format=output_format,
+        builder_optimization_level=builder_optimization_level,
+        max_aux_streams=max_aux_streams,
+        short_path=short_path,
+        bf16=bf16,
+        engine_folder=engine_folder,
     )
 
     if os.access(engine_path, mode=os.R_OK):
         return engine_path
 
-    alter_engine_path = os.path.join(
-        tempfile.gettempdir(),
-        os.path.splitdrive(engine_path)[1][1:]
-    )
+    # do not consider alternative path when the engine_folder is given
+    if engine_folder is None:
+        alter_engine_path = os.path.join(
+            tempfile.gettempdir(),
+            os.path.splitdrive(engine_path)[1][1:]
+        )
 
-    if os.access(alter_engine_path, mode=os.R_OK):
-        return alter_engine_path
+        if os.access(alter_engine_path, mode=os.R_OK):
+            return alter_engine_path
 
     try:
         # test writability
@@ -1235,30 +1980,27 @@ def trtexec(
             pass
         os.remove(engine_path)
     except PermissionError:
-        print(f"{engine_path} not writable", file=sys.stderr)
-        engine_path = alter_engine_path
-        dirname = os.path.dirname(engine_path)
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
-        print(f"change engine path to {engine_path}", file=sys.stderr)
+        if engine_folder is None:
+            print(f"{engine_path} is not writable", file=sys.stderr)
+            engine_path = alter_engine_path
+            dirname = os.path.dirname(engine_path)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+            print(f"change engine path to {engine_path}", file=sys.stderr)
+        else:
+            # do not consider alternative path when the engine_folder is given
+            raise PermissionError(f"{engine_path} is not writable")
 
     args = [
-        f'"{trtexec_path}"',
-        f'--onnx="{network_path}"',
-        f'--timingCacheFile="{engine_path}.cache"',
+        trtexec_path,
+        f"--onnx={network_path}",
+        f"--timingCacheFile={engine_path}.cache",
         f"--device={device_id}",
-        f'--saveEngine="{engine_path}"'
-    ]
-    args = [
-        f'{trtexec_path}',
-        f'--onnx={network_path}',
-        f'--timingCacheFile={engine_path}.cache',
-        f"--device={device_id}",
-        f'--saveEngine={engine_path}'
+        f"--saveEngine={engine_path}"
     ]
 
     if workspace is not None:
-        if trt_version >= 8400:
+        if trt_version >= (8, 4, 0):
             args.append(f"--memPoolSize=workspace:{workspace}")
         else:
             args.append(f"--workspace{workspace}")
@@ -1278,17 +2020,38 @@ def trtexec(
     if verbose:
         args.append("--verbose")
 
-    disabled_tactic_sources = []
-    if not use_cublas:
-        disabled_tactic_sources.extend(["-CUBLAS", "-CUBLAS_LT"])
-    if not use_cudnn:
-        disabled_tactic_sources.append("-CUDNN")
-    if not use_edge_mask_convolutions and trt_version >= 8401:
-        disabled_tactic_sources.append("-EDGE_MASK_CONVOLUTIONS")
-    if not use_jit_convolutions and trt_version >= 8500:
-        disabled_tactic_sources.append("-JIT_CONVOLUTIONS")
-    if disabled_tactic_sources:
-        args.append(f"--tacticSources={','.join(disabled_tactic_sources)}")
+    preview_features = []
+    if (use_cublas or use_cudnn) and (8, 6, 0) <= trt_version < (10, 0, 0):
+        preview_features.append("-disableExternalTacticSourcesForCore0805")
+
+    if preview_features and trt_version >= (8, 5, 0):
+        args.append(f"--preview={','.join(preview_features)}")
+
+    tactic_sources = []
+
+    if use_cublas:
+        tactic_sources.extend(["+CUBLAS", "+CUBLAS_LT"])
+    else:
+        tactic_sources.extend(["-CUBLAS", "-CUBLAS_LT"])
+
+    if use_cudnn:
+        tactic_sources.append("+CUDNN")
+    else:
+        tactic_sources.append("-CUDNN")
+
+    if trt_version >= (8, 4, 1):
+        if use_edge_mask_convolutions:
+            tactic_sources.append("+EDGE_MASK_CONVOLUTIONS")
+        else:
+            tactic_sources.append("-EDGE_MASK_CONVOLUTIONS")
+
+    if trt_version >= (8, 5, 0):
+        if use_jit_convolutions:
+            tactic_sources.append("+JIT_CONVOLUTIONS")
+        else:
+            tactic_sources.append("-JIT_CONVOLUTIONS")
+
+    args.append(f"--tacticSources={','.join(tactic_sources)}")
 
     if use_cuda_graph:
         args.extend((
@@ -1296,7 +2059,7 @@ def trtexec(
             "--noDataTransfers"
         ))
     else:
-        if trt_version >= 8600:
+        if trt_version >= (8, 6, 0):
             args.append("--skipInference")
         else:
             args.append("--buildOnly")
@@ -1304,8 +2067,8 @@ def trtexec(
     if not tf32:
         args.append("--noTF32")
 
-    if heuristic and trt_version >= 8500 and core.trt.DeviceProperties(device_id)["major"] >= 8:
-        if trt_version < 8600:
+    if heuristic and trt_version >= (8, 5, 0) and core.trt.DeviceProperties(device_id)["major"] >= 8:
+        if trt_version < (8, 6, 0):
             args.append("--heuristic")
         else:
             builder_optimization_level = 2
@@ -1315,11 +2078,11 @@ def trtexec(
         "--outputIOFormats=fp32:chw" if output_format == 0 else "--outputIOFormats=fp16:chw"
     ])
 
-    if faster_dynamic_shapes and not static_shape and 8500 <= trt_version < 8600:
+    if faster_dynamic_shapes and not static_shape and (8, 5, 0) <= trt_version < (8, 6, 0):
         args.append("--preview=+fasterDynamicShapes0805")
 
     if force_fp16:
-        if trt_version >= 8401:
+        if trt_version >= (8, 4, 1):
             args.extend([
                 "--layerPrecisions=*:fp16",
                 "--layerOutputTypes=*:fp16",
@@ -1328,40 +2091,34 @@ def trtexec(
         else:
             raise ValueError('"force_fp16" is not available')
 
-    if trt_version >= 8600:
+    if trt_version >= (8, 6, 0):
         args.append(f"--builderOptimizationLevel={builder_optimization_level}")
 
-    def runit(useSubp, check):
-        if useSubp:
-            print("using subprocess, ")
-            ret = " ".join(args)
-            print(ret)
-            return subprocess.run(args, env=env, check=check, stdout=sys.stderr)
-        else:
-            cmd = " ".join(args)
-            print("using os.system, ", cmd)
-            return os.system(cmd)
+        if max_aux_streams is not None:
+            args.append(f"--maxAuxStreams={max_aux_streams}")
+
+    if trt_version >= (9, 0, 0):
+        if bf16:
+            args.append("--bf16")
+
+    if trt_version >= (10, 4, 0):
+        if max_tactics is not None:
+            args.append(f"--maxTactics={max_tactics}")
+
+    args.extend(custom_args)
     import pyautogui
     os.environ['RIFE_PLAYER_SCRIPT_STATUS'] = 'GENERATING_ENGINE'
  
     pyautogui.alert('New resolution found, an one time optimization step will be performed for this resolution. It will take a few minutes.', 'New resolution found')
-
-    useSubp_ =  not sys.platform.startswith('linu')
-    print("USE SUBPROCESS: ", useSubp_)
     if log:
         env_key = "TRTEXEC_LOG_FILE"
         prev_env_value = os.environ.get(env_key)
-        env__ = dict(os.environ)
-        if sys.platform.startswith('linux'):
-            print("-----> LD_LIBRARY_PATH check before:",  env__['LD_LIBRARY_PATH'])
-            env__['LD_LIBRARY_PATH'] = '/usr/lib64-nvidia'
-            print("-----> LD_LIBRARY_PATH check after:",  env__['LD_LIBRARY_PATH'])
+
         if prev_env_value is not None and len(prev_env_value) > 0:
             # env_key has been set, no extra action
-            env = {env_key: prev_env_value}
-            print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-            runit(useSubp_, True)
-            #subprocess.run(args, env=env, check=True, stdout=sys.stderr)
+            env = {env_key: prev_env_value, "CUDA_MODULE_LOADING": "LAZY"}
+            env.update(**custom_env)
+            subprocess.run(args, env=env, check=True, stdout=sys.stderr)
         else:
             time_str = time.strftime('%y%m%d_%H%M%S', time.localtime())
 
@@ -1370,28 +2127,151 @@ def trtexec(
                 f"trtexec_{time_str}.log"
             )
 
-            env = {env_key: log_filename}
-            print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-            #completed_process = subprocess.run(args, env=env, check=False, stdout=sys.stderr)
-            runit(useSubp_, False)
+            env = {env_key: log_filename, "CUDA_MODULE_LOADING": "LAZY"}
+            env.update(**custom_env)
 
-            # if completed_process.returncode == 0:
-            #     try:
-            #         os.remove(log_filename)
-            #     except FileNotFoundError:
-            #         # maybe the official trtexec is used?
-            #         pass
-            # else:
-            #     if os.path.exists(log_filename):
-            #         raise RuntimeError(f"trtexec execution fails, log has been written to {log_filename}")
-            #     else:
-            #         raise RuntimeError(f"trtexec execution fails but no log is found")
+            completed_process = subprocess.run(args, env=env, check=False, stdout=sys.stderr)
+
+            if completed_process.returncode == 0:
+                try:
+                    os.remove(log_filename)
+                except FileNotFoundError:
+                    # maybe the official trtexec is used?
+                    pass
+            else:
+                if os.path.exists(log_filename):
+                    raise RuntimeError(f"trtexec execution fails, log has been written to {log_filename}")
+                else:
+                    raise RuntimeError(f"trtexec execution fails but no log is found")
     else:
-        print("----> TRT BUILD SYS PATH CHECK <---\n", sys.path, " \n env: " , env)
-        runit(useSubp_, True)
-        #subprocess.run(args, check=True, stdout=sys.stderr)
+        env = {"CUDA_MODULE_LOADING": "LAZY"}
+        env.update(**custom_env)
+        subprocess.run(args, env=env, check=True, stdout=sys.stderr)
 
     return engine_path
+
+
+def get_mxr_path(
+    network_path: str,
+    opt_shapes: typing.Tuple[int, int],
+    fp16: bool,
+    fast_math: bool,
+    exhaustive_tune: bool,
+    device_id: int,
+    short_path: typing.Optional[bool]
+) -> str:
+
+    with open(network_path, "rb") as file:
+        checksum = zlib.adler32(file.read())
+
+    migx_version = core.migx.Version()["migraphx_version_build"].decode()
+
+    try:
+        device_name = core.migx.DeviceProperties(device_id)["name"].decode()
+        device_name = device_name.replace(' ', '-')
+    except AttributeError:
+        device_name = f"device{device_id}"
+
+    shape_str = f"{opt_shapes[0]}x{opt_shapes[1]}"
+
+    identity = (
+        shape_str +
+        ("_fp16" if fp16 else "") +
+        ("_fast" if fast_math else "") +
+        ("_exhaustive" if exhaustive_tune else "") +
+        f"_migx-{migx_version}" +
+        f"_{device_name}" +
+        f"_{checksum:x}"
+    )
+
+    if short_path or (short_path is None and platform.system() == "Windows"):
+        dirname, basename = os.path.split(network_path)
+        return os.path.join(dirname, f"{zlib.crc32((basename + identity).encode()):x}.mxr")
+    else:
+        return f"{network_path}.{identity}.mxr"
+
+
+def migraphx_driver(
+    network_path: str,
+    channels: int,
+    opt_shapes: typing.Tuple[int, int],
+    fp16: bool,
+    fast_math: bool,
+    exhaustive_tune: bool,
+    device_id: int,
+    input_name: str = "input",
+    short_path: typing.Optional[bool] = None,
+    custom_env: typing.Dict[str, str] = {},
+    custom_args: typing.List[str] = []
+) -> str:
+
+    if isinstance(opt_shapes, int):
+        opt_shapes = (opt_shapes, opt_shapes)
+
+    mxr_path = get_mxr_path(
+        network_path=network_path,
+        opt_shapes=opt_shapes,
+        fp16=fp16,
+        fast_math=fast_math,
+        exhaustive_tune=exhaustive_tune,
+        device_id=device_id,
+        short_path=short_path
+    )
+
+    if os.access(mxr_path, mode=os.R_OK):
+        return mxr_path
+
+    alter_mxr_path = os.path.join(
+        tempfile.gettempdir(),
+        os.path.splitdrive(mxr_path)[1][1:]
+    )
+
+    if os.access(alter_mxr_path, mode=os.R_OK):
+        return alter_mxr_path
+
+    try:
+        # test writability
+        with open(mxr_path, "w") as f:
+            pass
+        os.remove(mxr_path)
+    except PermissionError:
+        print(f"{mxr_path} not writable", file=sys.stderr)
+        mxr_path = alter_mxr_path
+        dirname = os.path.dirname(mxr_path)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        print(f"change mxr path to {mxr_path}", file=sys.stderr)
+
+    if device_id != 0:
+        raise ValueError('"device_id" must be 0')
+
+    args = [
+        migraphx_driver_path,
+        "compile",
+        "--onnx", f"{network_path}",
+        "--gpu",
+        # f"--device={device_id}",
+        "--optimize",
+        "--binary",
+        "--output", f"{mxr_path}"
+    ]
+
+    args.extend(["--input-dim", f"@{input_name}", "1", f"{channels}", f"{opt_shapes[1]}", f"{opt_shapes[0]}"])
+
+    if fp16:
+        args.append("--fp16")
+
+    if not fast_math:
+        args.append("--disable-fast-math")
+
+    if exhaustive_tune:
+        args.append("--exhaustive-tune")
+
+    args.extend(custom_args)
+
+    subprocess.run(args, env=custom_env, check=True, stdout=sys.stderr)
+
+    return mxr_path
 
 
 def calc_size(width: int, tiles: int, overlap: int, multiple: int = 1) -> int:
@@ -1448,6 +2328,10 @@ def init_backend(
         backend = Backend.NCNN_VK()
     elif backend is Backend.ORT_DML: # type: ignore
         backend = Backend.ORT_DML()
+    elif backend is Backend.MIGX: # type: ignore
+        backend = Backend.MIGX()
+    elif backend is Backend.OV_NPU:
+        backend = Backend.OV_NPU()
 
     backend = copy.deepcopy(backend)
 
@@ -1457,6 +2341,9 @@ def init_backend(
 
         if backend.max_shapes is None:
             backend.max_shapes = backend.opt_shapes
+    elif isinstance(backend, Backend.MIGX):
+        if backend.opt_shapes is None:
+            backend.opt_shapes = trt_opt_shapes
 
     return backend
 
@@ -1468,47 +2355,155 @@ def _inference(
     tilesize: typing.Tuple[int, int],
     backend: backendT,
     path_is_serialization: bool = False,
-    input_name: str = "input"
-) -> vs.VideoNode:
+    input_name: str = "input",
+    flexible_output_prop: typing.Optional[str] = None,
+    batch_size: int = 1
+) -> typing.Union[vs.VideoNode, typing.Dict[str, typing.Any]]:
 
     if not path_is_serialization:
         network_path = typing.cast(str, network_path)
         if not os.path.exists(network_path):
             raise RuntimeError(
                 f'"{network_path}" not found, '
-                "built-in models can be found at"
+                "built-in models can be found at "
                 "https://github.com/AmusementClub/vs-mlrt/releases/tag/model-20211209, "
                 "https://github.com/AmusementClub/vs-mlrt/releases/tag/model-20220923 and "
                 "https://github.com/AmusementClub/vs-mlrt/releases/tag/external-models"
             )
 
+    if path_is_serialization:
+        if isinstance(backend, Backend.TRT):
+            raise ValueError('"path_is_serialization" must be False for trt backend')
+        elif isinstance(backend, Backend.MIGX):
+            raise ValueError('"path_is_serialization" must be False for migx backend')
+
+    if not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError('"batch_size" must be a positve integer')
+
+    if batch_size > 1:
+        import numpy as np
+        import onnx
+
+        if path_is_serialization:
+            model = onnx.load_model_from_string(network_path)
+        else:
+            model = onnx.load(network_path)
+
+        graph = model.graph
+        in_channels = graph.input[0].type.tensor_type.shape.dim[1].dim_value
+        graph.input[0].type.tensor_type.shape.dim[1].dim_value *= batch_size
+        graph.output[0].type.tensor_type.shape.dim[1].dim_param = "_vsmlrt_output_channels"
+
+        input_name = graph.input[0].name
+        output_name = graph.output[0].name
+        for node in graph.node:
+            for i, name in enumerate(node.input):
+                if name == input_name:
+                    node.input[i] = "_vsmlrt_input"
+
+            for i, name in enumerate(node.output):
+                if name == output_name:
+                    node.output[i] = "_vsmlrt_output"
+
+        graph.node.insert(1, onnx.helper.make_node(
+            op_type="Constant",
+            inputs=[],
+            outputs=["_vsmlrt_input_shape"],
+            value=onnx.numpy_helper.from_array(np.array([-1, in_channels, 0, 0]))
+        ))
+        graph.node.insert(2, onnx.helper.make_node(
+            op_type="Reshape",
+            inputs=[input_name, "_vsmlrt_input_shape"],
+            outputs=["_vsmlrt_input"]
+        ))
+
+        graph.node.insert(-1, onnx.helper.make_node(
+            op_type="Constant",
+            inputs=[],
+            outputs=["_vsmlrt_output_shape"],
+            value=onnx.numpy_helper.from_array(np.array([1, -1, 0, 0]))
+        ))
+        graph.node.insert(-1, onnx.helper.make_node(
+            op_type="Reshape",
+            inputs=["_vsmlrt_output", "_vsmlrt_output_shape"],
+            outputs=[output_name]
+        ))
+
+        if backend.supports_onnx_serialization:
+            network_path = model.SerializeToString()
+        else:
+            network_path = f"{network_path}_batch{batch_size}.onnx"
+            onnx.save(model, network_path)
+
+        path_is_serialization = backend.supports_onnx_serialization
+
+        pad = (batch_size - clips[0].num_frames % batch_size) % batch_size
+        if pad:
+            clips = [clip.std.DuplicateFrames([clip.num_frames - 1] * pad) for clip in clips]
+
+        clips = [
+            clip[i::batch_size]
+            for i in range(batch_size)
+            for clip in clips
+        ]
+
+        flexible_output_prop_orig = flexible_output_prop
+
+        if flexible_output_prop is None:
+            flexible_output_prop = "vsmlrt_flexible_batch"
+
+    kwargs = dict(overlap=overlap, tilesize=tilesize)
+    if flexible_output_prop is not None:
+        kwargs["flexible_output_prop"] = flexible_output_prop
+
     if isinstance(backend, Backend.ORT_CPU):
-        clip = core.ort.Model(
+        ret = core.ort.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             provider="CPU", builtin=False,
             num_streams=backend.num_streams,
             verbosity=backend.verbosity,
             fp16=backend.fp16,
             path_is_serialization=path_is_serialization,
-            fp16_blacklist_ops=backend.fp16_blacklist_ops
+            fp16_blacklist_ops=backend.fp16_blacklist_ops,
+            **kwargs
         )
     elif isinstance(backend, Backend.ORT_DML):
-        clip = core.ort.Model(
+        ret = core.ort.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             provider="DML", builtin=False,
             device_id=backend.device_id,
             num_streams=backend.num_streams,
             verbosity=backend.verbosity,
             fp16=backend.fp16,
             path_is_serialization=path_is_serialization,
-            fp16_blacklist_ops=backend.fp16_blacklist_ops
+            fp16_blacklist_ops=backend.fp16_blacklist_ops,
+            **kwargs
+        )
+    elif isinstance(backend, Backend.ORT_COREML):
+        ret = core.ort.Model(
+            clips, network_path,
+            provider="COREML", builtin=False,
+            num_streams=backend.num_streams,
+            verbosity=backend.verbosity,
+            fp16=backend.fp16,
+            path_is_serialization=path_is_serialization,
+            fp16_blacklist_ops=backend.fp16_blacklist_ops,
+            **kwargs
         )
     elif isinstance(backend, Backend.ORT_CUDA):
-        clip = core.ort.Model(
+        version_list = core.ort.Version().get("onnxruntime_version", b"0.0.0").split(b'.')
+        if len(version_list) != 3:
+            version = (0, 0, 0)
+        else:
+            version = tuple(map(int, version_list))
+
+        if version >= (1, 18, 0):
+            kwargs["prefer_nhwc"] = backend.prefer_nhwc
+            kwargs["output_format"] = backend.output_format
+            kwargs["tf32"] = backend.tf32
+
+        ret = core.ort.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             provider="CUDA", builtin=False,
             device_id=backend.device_id,
             num_streams=backend.num_streams,
@@ -1517,42 +2512,71 @@ def _inference(
             fp16=backend.fp16,
             path_is_serialization=path_is_serialization,
             use_cuda_graph=backend.use_cuda_graph,
-            fp16_blacklist_ops=backend.fp16_blacklist_ops
+            fp16_blacklist_ops=backend.fp16_blacklist_ops,
+            **kwargs
         )
     elif isinstance(backend, Backend.OV_CPU):
-        config = lambda: dict(
-            CPU_THROUGHPUT_STREAMS=backend.num_streams,
-            CPU_BIND_THREAD="YES" if backend.bind_thread else "NO",
-            CPU_THREADS_NUM=backend.num_threads,
-            ENFORCE_BF16="YES" if backend.bf16 else "NO"
-        )
+        version = tuple(map(int, core.ov.Version().get("openvino_version", b"0.0.0").split(b'-')[0].split(b'.')))
 
-        clip = core.ov.Model(
+        if version >= (2024, 0, 0):
+            config_dict = dict(
+                NUM_STREAMS=backend.num_streams,
+                INFERENCE_NUM_THREADS=backend.num_threads,
+                ENABLE_CPU_PINNING="YES" if backend.bind_thread else "NO"
+            )
+            if backend.fp16:
+                config_dict["INFERENCE_PRECISION_HINT"] = "f16"
+            elif backend.bf16:
+                config_dict["INFERENCE_PRECISION_HINT"] = "bf16"
+            else:
+                config_dict["INFERENCE_PRECISION_HINT"] = "f32"
+
+            config = lambda: config_dict
+        else:
+            config = lambda: dict(
+                CPU_THROUGHPUT_STREAMS=backend.num_streams,
+                CPU_BIND_THREAD="YES" if backend.bind_thread else "NO",
+                CPU_THREADS_NUM=backend.num_threads,
+                ENFORCE_BF16="YES" if backend.bf16 else "NO"
+            )
+
+        ret = core.ov.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             device="CPU", builtin=False,
-            fp16=backend.fp16,
+            fp16=False, # use ov's internal quantization
             config=config,
             path_is_serialization=path_is_serialization,
-            fp16_blacklist_ops=backend.fp16_blacklist_ops
+            fp16_blacklist_ops=backend.fp16_blacklist_ops, # disabled since fp16 = False
+            **kwargs
         )
     elif isinstance(backend, Backend.OV_GPU):
-        config = lambda: dict(
-            GPU_THROUGHPUT_STREAMS=backend.num_streams
-        )
-        clip = core.ov.Model(
+        version = tuple(map(int, core.ov.Version().get("openvino_version", b"0.0.0").split(b'-')[0].split(b'.')))
+
+        if version >= (2024, 0, 0):
+            config_dict = dict(
+                NUM_STREAMS=backend.num_streams,
+            )
+            if backend.fp16:
+                config_dict["INFERENCE_PRECISION_HINT"] = "f16"
+            else:
+                config_dict["INFERENCE_PRECISION_HINT"] = "f32"
+
+            config = lambda: config_dict
+        else:
+            config = lambda: dict(
+                GPU_THROUGHPUT_STREAMS=backend.num_streams
+            )
+
+        ret = core.ov.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             device=f"GPU.{backend.device_id}", builtin=False,
-            fp16=backend.fp16,
+            fp16=False, # use ov's internal quantization
             config=config,
             path_is_serialization=path_is_serialization,
-            fp16_blacklist_ops=backend.fp16_blacklist_ops
+            fp16_blacklist_ops=backend.fp16_blacklist_ops,
+            **kwargs
         )
     elif isinstance(backend, Backend.TRT):
-        if path_is_serialization:
-            raise ValueError('"path_is_serialization" must be False for trt backend')
-
         network_path = typing.cast(str, network_path)
 
         channels = sum(clip.format.num_planes for clip in clips)
@@ -1584,31 +2608,101 @@ def _inference(
             min_shapes=backend.min_shapes,
             faster_dynamic_shapes=backend.faster_dynamic_shapes,
             force_fp16=backend.force_fp16,
-            builder_optimization_level=backend.builder_optimization_level
+            builder_optimization_level=backend.builder_optimization_level,
+            max_aux_streams=backend.max_aux_streams,
+            short_path=backend.short_path,
+            bf16=backend.bf16,
+            custom_env=backend.custom_env,
+            custom_args=backend.custom_args,
+            engine_folder=backend.engine_folder,
+            max_tactics=backend.max_tactics,
         )
-        clip = core.trt.Model(
+        ret = core.trt.Model(
             clips, engine_path,
-            overlap=overlap,
-            tilesize=tilesize,
             device_id=backend.device_id,
             use_cuda_graph=backend.use_cuda_graph,
             num_streams=backend.num_streams,
-            verbosity=4 if backend.verbose else 2
+            verbosity=4 if backend.verbose else 2,
+            **kwargs
         )
     elif isinstance(backend, Backend.NCNN_VK):
-        clip = core.ncnn.Model(
+        ret = core.ncnn.Model(
             clips, network_path,
-            overlap=overlap, tilesize=tilesize,
             device_id=backend.device_id,
             num_streams=backend.num_streams,
             builtin=False,
             fp16=backend.fp16,
             path_is_serialization=path_is_serialization,
+            **kwargs
+        )
+    elif isinstance(backend, Backend.MIGX):
+        network_path = typing.cast(str, network_path)
+
+        channels = sum(clip.format.num_planes for clip in clips)
+
+        opt_shapes = backend.opt_shapes if backend.opt_shapes is not None else tilesize
+
+        mxr_path = migraphx_driver(
+            network_path,
+            channels=channels,
+            opt_shapes=opt_shapes,
+            fp16=backend.fp16,
+            fast_math=backend.fast_math,
+            exhaustive_tune=backend.exhaustive_tune,
+            device_id=backend.device_id,
+            input_name=input_name,
+            short_path=backend.short_path,
+            custom_env=backend.custom_env,
+            custom_args=backend.custom_args
+        )
+        ret = core.migx.Model(
+            clips, mxr_path,
+            device_id=backend.device_id,
+            **kwargs
+        )
+    elif isinstance(backend, Backend.OV_NPU):
+        ret = core.ov.Model(
+            clips, network_path,
+            device="NPU", builtin=False,
+            fp16=False, # use ov's internal quantization
+            path_is_serialization=path_is_serialization,
+            **kwargs
         )
     else:
         raise TypeError(f'unknown backend {backend}')
 
-    return clip
+    if batch_size > 1:
+        clip = ret["clip"]
+        num_planes = ret["num_planes"]
+        clips = [
+            clip.std.PropToClip(prop=f"{flexible_output_prop}{i}")
+            for i in range(num_planes)
+        ]
+
+        if flexible_output_prop_orig is None:
+            if num_planes == batch_size * 3:
+                clips = [
+                    core.std.ShufflePlanes(clips[i:i+3], [0] * 3, vs.RGB)
+                    for i in range(0, num_planes, 3)
+                ]
+            elif num_planes != batch_size:
+                raise ValueError("number of output channels must be 1 or 3")
+
+            ret = core.std.Interleave(clips)
+            if pad:
+                ret = ret[:-pad]
+        else:
+            clips = [core.std.Interleave(clips[i::batch_size]) for i in range(num_planes // batch_size)]
+            if pad:
+                clips = [clip[:-pad] for clip in clips]
+
+            clip = clip.std.BlankClip(keep=True)
+            for i in range(len(clips)):
+                clip = clip.std.ClipToProp(clips[i], f"{flexible_output_prop_orig}{i}")
+
+            ret = dict(clip=clip, num_planes=len(clips))
+
+    return ret
 
 
 def inference_with_fallback(
@@ -1618,16 +2712,18 @@ def inference_with_fallback(
     tilesize: typing.Tuple[int, int],
     backend: backendT,
     path_is_serialization: bool = False,
-    input_name: str = "input"
+    input_name: str = "input",
+    batch_size: int = 1 # experimental
 ) -> vs.VideoNode:
 
     try:
-        return _inference(
+        ret = _inference(
             clips=clips, network_path=network_path,
             overlap=overlap, tilesize=tilesize,
             backend=backend,
             path_is_serialization=path_is_serialization,
-            input_name=input_name
+            input_name=input_name,
+            batch_size=batch_size
         )
     except Exception as e:
         if fallback_backend is not None:
@@ -1635,15 +2731,18 @@ def inference_with_fallback(
             logger = logging.getLogger("vsmlrt")
             logger.warning(f'"{backend}" fails, trying fallback backend "{fallback_backend}"')
 
-            return _inference(
+            ret = _inference(
                 clips=clips, network_path=network_path,
                 overlap=overlap, tilesize=tilesize,
                 backend=fallback_backend,
                 path_is_serialization=path_is_serialization,
-                input_name=input_name
+                input_name=input_name,
+                batch_size=batch_size
             )
         else:
             raise e
+
+    return typing.cast(vs.VideoNode, ret)
 
 
 def inference(
@@ -1652,11 +2751,11 @@ def inference(
     overlap: typing.Tuple[int, int] = (0, 0),
     tilesize: typing.Optional[typing.Tuple[int, int]] = None,
     backend: backendT = Backend.OV_CPU(),
-    input_name: typing.Optional[str] = "input"
+    input_name: typing.Optional[str] = "input",
+    batch_size: int = 1 # experimental
 ) -> vs.VideoNode:
 
     if isinstance(clips, vs.VideoNode):
-        clips = typing.cast(vs.VideoNode, clips)
         clips = [clips]
 
     if tilesize is None:
@@ -1674,7 +2773,95 @@ def inference(
         tilesize=tilesize,
         backend=backend,
         path_is_serialization=False,
-        input_name=input_name
+        input_name=input_name,
+        batch_size=batch_size
+    )
+
+
+def flexible_inference_with_fallback(
+    clips: typing.List[vs.VideoNode],
+    network_path: typing.Union[bytes, str],
+    overlap: typing.Tuple[int, int],
+    tilesize: typing.Tuple[int, int],
+    backend: backendT,
+    path_is_serialization: bool = False,
+    input_name: str = "input",
+    flexible_output_prop: str = "vsmlrt_flexible",
+    batch_size: int = 1 # experimental
+) -> typing.List[vs.VideoNode]:
+
+    try:
+        ret = _inference(
+            clips=clips, network_path=network_path,
+            overlap=overlap, tilesize=tilesize,
+            backend=backend,
+            path_is_serialization=path_is_serialization,
+            input_name=input_name,
+            flexible_output_prop=flexible_output_prop,
+            batch_size=batch_size
+        )
+    except Exception as e:
+        if fallback_backend is not None:
+            import logging
+            logger = logging.getLogger("vsmlrt")
+            logger.warning(f'"{backend}" fails, trying fallback backend "{fallback_backend}"')
+
+            ret = _inference(
+                clips=clips, network_path=network_path,
+                overlap=overlap, tilesize=tilesize,
+                backend=fallback_backend,
+                path_is_serialization=path_is_serialization,
+                input_name=input_name,
+                flexible_output_prop=flexible_output_prop,
+                batch_size=batch_size
+            )
+        else:
+            raise e
+
+    ret = typing.cast(typing.Dict[str, typing.Any], ret)
+    clip = ret["clip"]
+    num_planes = ret["num_planes"]
+
+    planes = [
+        clip.std.PropToClip(prop=f"{flexible_output_prop}{i}")
+        for i in range(num_planes)
+    ]
+
+    return planes
+
+
+def flexible_inference(
+    clips: typing.Union[vs.VideoNode, typing.List[vs.VideoNode]],
+    network_path: str,
+    overlap: typing.Tuple[int, int] = (0, 0),
+    tilesize: typing.Optional[typing.Tuple[int, int]] = None,
+    backend: backendT = Backend.OV_CPU(),
+    input_name: typing.Optional[str] = "input",
+    flexible_output_prop: str = "vsmlrt_flexible",
+    batch_size: int = 1 # experimental
+) -> typing.List[vs.VideoNode]:
+
+    if isinstance(clips, vs.VideoNode):
+        clips = [clips]
+
+    if tilesize is None:
+        tilesize = (clips[0].width, clips[0].height)
+
+    backend = init_backend(backend=backend, trt_opt_shapes=tilesize)
+
+    if input_name is None:
+        input_name = get_input_name(network_path)
+
+    return flexible_inference_with_fallback(
+        clips=clips,
+        network_path=network_path,
+        overlap=overlap,
+        tilesize=tilesize,
+        backend=backend,
+        path_is_serialization=False,
+        input_name=input_name,
+        flexible_output_prop=flexible_output_prop,
+        batch_size=batch_size
     )
 
 
@@ -1711,9 +2898,9 @@ class BackendV2:
     def TRT(*,
         num_streams: int = 1,
         fp16: bool = False,
-        tf32: bool = True,
+        tf32: bool = False,
         output_format: int = 0, # 0: fp32, 1: fp16
-        workspace: typing.Optional[int] = 128,
+        workspace: typing.Optional[int] = None,
         use_cuda_graph: bool = False,
         static_shape: bool = True,
         min_shapes: typing.Tuple[int, int] = (0, 0),
@@ -1721,7 +2908,7 @@ class BackendV2:
         max_shapes: typing.Optional[typing.Tuple[int, int]] = None,
         force_fp16: bool = False,
         use_cublas: bool = False,
-        use_cudnn: bool = True,
+        use_cudnn: bool = False,
         device_id: int = 0,
         **kwargs
     ) -> Backend.TRT:
@@ -1821,17 +3008,57 @@ class BackendV2:
             **kwargs
         )
 
+    @staticmethod
+    def MIGX(*,
+        fp16: bool = False,
+        opt_shapes: typing.Optional[typing.Tuple[int, int]] = None,
+        **kwargs
+    ) -> Backend.MIGX:
+
+        return Backend.MIGX(
+            fp16=fp16,
+            opt_shapes=opt_shapes,
+            **kwargs
+        )
+
+    @staticmethod
+    def OV_NPU(**kwargs
+    ) -> Backend.OV_NPU:
+        return Backend.OV_NPU(
+            **kwargs
+        )
+
+    @staticmethod
+    def ORT_COREML(*,
+        num_streams: int = 1,
+        fp16: bool = False,
+        **kwargs
+    ) -> Backend.ORT_COREML:
+        return Backend.ORT_COREML(
+            num_streams=num_streams,
+            fp16=fp16,
+            **kwargs
+        )
+
 
 def fmtc_resample(clip: vs.VideoNode, **kwargs) -> vs.VideoNode:
     clip_org = clip
 
     if clip.format.sample_type == vs.FLOAT and clip.format.bits_per_sample != 32:
         format = clip.format.replace(core=core, bits_per_sample=32)
-        clip = core.resize.Point(clip, format=format)
+        clip = core.resize.Point(clip, format=format.id)
 
     clip = core.fmtc.resample(clip, **kwargs)
 
     if clip.format.bits_per_sample != clip_org.format.bits_per_sample:
-        clip = core.resize.Point(clip, format=clip_org.format)
+        clip = core.resize.Point(clip, format=clip_org.format.id)
 
     return clip
+
+
+def parse_trt_version(version: int) -> typing.Tuple[int, int, int]:
+    # before trt 10
+    if version < 10000:
+        return version // 1000, (version // 100) % 10, version % 100
+    else:
+        return version // 10000, (version // 100) % 100, version % 100

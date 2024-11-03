@@ -105,9 +105,10 @@ try:
         #print("test3 before backend")
         trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None)
         #trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None,static_shape=False,min_shapes=[64,64],max_shapes=[2560,1440])
+        # trt_backend = Backend.TRT(fp16=True,device_id=0,num_streams=2,output_format=1,use_cuda_graph=True,workspace=None,static_shape=False,min_shapes=[7,7],max_shapes=[2560,1440])
         #print("test3 before rife")
 
-        clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=multiplier)
+        clip = RIFE(clip,model=RIFEModel.v4_6, backend=trt_backend, multi=multiplier)# v4_6
         if needsPadding:
             clip =  clip.std.Crop(padding[0], padding[1],padding[2],padding[3])
 
@@ -153,19 +154,20 @@ try:
 except Exception as e:
     import traceback
 
-    def draw_text(clip, text, x, y, font_size=20, color=[255, 255, 255]):
-        blank = vs.core.std.BlankClip(clip, width=clip.width, height=clip.height, format=clip.format)
+    def draw_text(clip, text, align=4, scale=2):
+        blank = vs.core.std.BlankClip(clip, width=2, height=clip.height, format=clip.format)#clip.width*0
         merged = vs.core.std.StackHorizontal([clip, blank])
-        text_clip = vs.core.text.Text(clip=merged, text=text,alignment=4, scale=2 )#, x=x, y=y, size=font_size, color=color)
+        text_clip = vs.core.text.Text(clip=merged, text=text,alignment=align, scale=scale )#, x=x, y=y, size=font_size, color=color)
         return text_clip
+
     
     exception_str = traceback.format_exc()
     errormsg = f"Interpolation script failed, error: \n----------------\n{e}\n{exception_str}----------------\n"
     try:
-        clip = draw_text(video_in, errormsg, x=50, y=50, font_size=30, color=[255, 255, 255])
+        clip = draw_text(video_in, errormsg )
     except:
         clip = clip.resize.Bicubic(format=vs.RGB24,matrix_in_s=cMatrix) #RGBH for 16 bit per sample output
-        clip = draw_text(clip, errormsg, x=50, y=50, font_size=30, color=[255, 255, 255])
+        clip = draw_text(clip, errormsg )
         clip = core.resize.Bicubic(clip,  format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
     # pyautogui
     # try:
