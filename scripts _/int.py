@@ -1,7 +1,13 @@
 
-import sys, os;
+import sys, os
+
 RIFE_PLAYER_MLRT_SCRIPT_PATH =  os.getenv("RIFE_PLAYER_MLRT_SCRIPT_PATH")
 sys.path+=[RIFE_PLAYER_MLRT_SCRIPT_PATH]
+# print = lambda *args: 1 if os.getenv("vs_silent") else print
+# print("os.getenv('vs_silent')", os.getenv("vs_silent"), "--------------------------------------------")
+
+# print("-----> version" ,sys.version, "----bin", sys.executable, "RIFE_PLAYER_MLRT_SCRIPT_PATH", RIFE_PLAYER_MLRT_SCRIPT_PATH)
+
 import time, vapoursynth as vs, fractions, configparser, threading
 from vsmlrt import RIFE, RIFEModel, Backend
 def mult32(number):  return  ((number + 31) // 32) * 32
@@ -68,11 +74,6 @@ try:
         try:core.std.LoadPlugin("/content/drive/MyDrive/rifef/libmiscfilters.so") #/content/vs-miscfilters-obsolete/build
         except Exception as e: 
             print(e)
-        try:   cFormat = eval('vs.' + clip.format.name)
-        except:   cFormat = vs.YUV420P8
-
-        try:   cFamily = str(clip.format.color_family)
-        except:  cFamily = 'ColorFamily.YUV'
 
         #print("-----> clip bps1 ", clip[0].format.bits_per_sample )
         # if cFamily == 'ColorFamily.RGB':
@@ -90,6 +91,7 @@ try:
         #clip = vs.core.std.CropAbs(clip, left=0, top=0, width=new_width, height=new_height)
         #clip = clip.misc.SCDetect(threshold=0.1)
         #clip = core.std.Expr(clip, "x 1 -")
+        
         oriw = clip.width
         orih = clip.height
         padding = None
@@ -120,8 +122,9 @@ try:
             fps =  float(container_fps)*multiplier
         except:
             pass
-
-        clip = core.resize.Bicubic(clip,  format=vs.YUV420P8, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
+        #YUV420P8
+        pixel_format = vs.YUV444P8 if os.getenv("vs_output_pixel_format") == "yuv444p" else vs.YUV420P8
+        clip = core.resize.Bicubic(clip,  format=pixel_format, matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
         # clip = core.resize.Bicubic(clip,  matrix_s=cMatrix, range_s=cRange, filter_param_a=1, filter_param_b=0) #width=getW(), height=getH(),
         
         #clip = vs.core.std.AddBorders(clip,  right=left, bottom=top )  

@@ -1,4 +1,5 @@
 import os, pyautogui,vapoursynth
+print = lambda *args: 1 if os.getenv("vs_silent") else print
 
 
 def get_trt_path():

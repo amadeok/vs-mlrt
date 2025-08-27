@@ -1,4 +1,5 @@
 __version__ = "3.22.7"
+print = lambda *args: 1 if os.getenv("vs_silent") else print
 
 __all__ = [
     "Backend", "BackendV2",
