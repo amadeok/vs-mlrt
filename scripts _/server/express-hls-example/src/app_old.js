@@ -22,12 +22,12 @@ host = "192.168.1.160"
 const socketPath = '/tmp/mpvsocketr';
 __dirname
 const streamPath = __dirname + "/stream/";
-let inputFile = "/home/amadeok/Downloads/Demon Slayer/01.mp4";
+let inputFile = "/home/user/Downloads/Demon Slayer/01.mp4";
 let useNvenc = 1;
 const enc = useNvenc ? "--ovc=h264_nvenc --ovcopts-add=preset=p1" : "--ovc=libx264";
 const opts = !useNvenc ? "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16" : "";
 let args = [
-    "--vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8", enc, opts,
+    "--vf='lavfi=[scale=iw/2:ih/2],vapoursynth:[/home/user/vs-mlrt/scripts/test3.py]':4:8", enc, opts,
     "--oac=aac", "--of=ssegment",
     "--ofopts=segment_time=1,segment_format=mpegts,segment_list_size=0,"
     + "segment_start_number=0,segment_list_flags=+live,segment_list=[" + streamPath + "out.m3u8]",
@@ -124,7 +124,7 @@ function startMpvEv(file) {
 //const player = new mpv.MPVClient(socketPath);
 const server = app.listen(3000, host);
 
-const directoryPath = '/home/amadeok/Downloads/Demon Slayer'; // Specify the directory path here
+const directoryPath = '/home/user/Downloads/Demon Slayer'; // Specify the directory path here
 let curDir = "";
 
 //app.use(express.static(__dirname + '/public'));

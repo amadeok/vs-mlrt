@@ -87,7 +87,7 @@ let usetimerPauser = false;
 const socketPath = '/tmp/mpvsocketr2';
 const streamPath = __dirname + "/stream/";
 let inputFile = "/mnt/SAB/filmhuari/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG[TGx]/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG.mkv"
-//inputFile = "/home/amadeok/Downloads/bnha92.mkv"
+//inputFile = "/home/user/Downloads/bnha92.mkv"
 const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 
@@ -290,7 +290,7 @@ function getArgs(stream, file, incolab) {
 
 
     let scriptPath1 = "/content/mlrt/vs-mlrt/scripts/test3.py"
-    let scriptPath2 = "/home/amadeok/vs-mlrt/scripts/test3.py"
+    let scriptPath2 = "/home/user/vs-mlrt/scripts/test3.py"
     const [numerator, denominator] = stream.r_frame_rate.split('/').map(Number);
     let result;
     if (!isNaN(numerator) && !isNaN(denominator)) {
@@ -677,8 +677,8 @@ app.get('/video2', (req, res) => {
 
 
     const ffmpegProcess = child_process.spawn('mpv', [
-        //'/home/amadeok/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
-        '"/home/amadeok/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
+        //'/home/user/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
+        '"/home/user/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
         //'--no-cache',
         // "--o=-",
         "--of=mpegts",
@@ -686,8 +686,8 @@ app.get('/video2', (req, res) => {
         //  "--oac=pcm_s16le",
         "--ovc=h264_nvenc",
         "--ovcopts-add=preset=p1",
-        "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
-        //  "--vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+        "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/user/vs-mlrt/scripts/test3.py]':4:8",
+        //  "--vf='vapoursynth:[/home/user/vs-mlrt/scripts/test3.py]':4:8",
         "-o",
         pathToFifo
         //"-"

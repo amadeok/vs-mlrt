@@ -3,7 +3,7 @@ const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-ffmpeg( "/home/amadeok/Downloads/Demon Slayer/01.mp4", { timeout: 432000 }).addOptions([
+ffmpeg( "/home/user/Downloads/Demon Slayer/01.mp4", { timeout: 432000 }).addOptions([
     '-profile:v baseline',
     '-level 3.0',
     '-start_number 0',

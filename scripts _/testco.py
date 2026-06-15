@@ -40,7 +40,7 @@ print(clip_rgbh.format)
 #  - GPU Backend.TRT(fp16=True, device_id=0, num_streams=1): TensorRT runtime, the fastest NV GPU runtime.
 model = RIFEModel.v4_6
 multi =2
-#model = "/home/amadeok/vs-mlrt/vstrt/build/models/rife/72f.engine"
+#model = "/home/user/vs-mlrt/vstrt/build/models/rife/72f.engine"
 flt = RIFE(clip_rgbh, model=model, backend=Backend.TRT(num_streams=6), multi=multi)
 print("rife")
 

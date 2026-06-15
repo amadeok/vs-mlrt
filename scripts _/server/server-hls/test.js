@@ -1,6 +1,5 @@
 const fs = require('fs');
 
-const filePath = '/home/amadeok/vs-mlrt/scripts/server/server-hls/public/stream/str0000.ts';
 
 // fs.watch(filePath, (eventType, filename) => {
 //   if (filename) {

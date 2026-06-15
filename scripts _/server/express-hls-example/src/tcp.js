@@ -5,7 +5,7 @@ const child_process = require('child_process');
 const fs = require('fs');
 
 const PORT = 3000;
-//ffmpeg -i "/home/amadeok/Downloads/Demon Slayer/01.mp4" -f mpegts tcp://192.168.1.160:3001
+//ffmpeg -i "/home/user/Downloads/Demon Slayer/01.mp4" -f mpegts tcp://192.168.1.160:3001
 
 app.get('/', (req, res) => {
   return res.status(200).sendFile(`${__dirname}/tcpclient.html`);
@@ -30,8 +30,8 @@ app.get('/video', (req, res) => {
 
 
   const ffmpegProcess = child_process.spawn('mpv', [
-    //'/home/amadeok/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
-    '"/home/amadeok/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
+    //'/home/user/Downloads/Demon Slayer/01.mp4', // FFmpeg input stream URL
+    '"/home/user/Downloads/Demon Slayer/1.mkv"', // FFmpeg input stream URL
     //'--no-cache',
     // "--o=-",
     "--of=mpegts",
@@ -39,8 +39,8 @@ app.get('/video', (req, res) => {
     //  "--oac=pcm_s16le",
     "--ovc=h264_nvenc",
     "--ovcopts-add=preset=p1",
-    "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
-    //  "--vf='vapoursynth:[/home/amadeok/vs-mlrt/scripts/test3.py]':4:8",
+    "--vf='lavfi=[scale=iw/2:-1],vapoursynth:[/home/user/vs-mlrt/scripts/test3.py]':4:8",
+    //  "--vf='vapoursynth:[/home/user/vs-mlrt/scripts/test3.py]':4:8",
     "-o",
     pathToFifo
     //"-"

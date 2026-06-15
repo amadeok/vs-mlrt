@@ -98,7 +98,7 @@ let usetimerPauser = false;
 const socketPath = '/tmp/mpvsocketr2';
 const streamPath1 = __dirname + "/stream/";
 let inputFile = "/mnt/SAB/filmhuari/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG[TGx]/The.Two.Popes.2019.720p.NF.WEBRip.800MB.x264-GalaxyRG.mkv"
-//inputFile = "/home/amadeok/Downloads/bnha92.mkv"
+//inputFile = "/home/user/Downloads/bnha92.mkv"
 const codec_hw_args = ["--ovc=h264_nvenc", "--ovcopts-add=preset=p1"]
 const codec_sw_args = ["--ovc=libx264", "--ovcopts=b=11500000,preset=veryfast,minrate=11500000,maxrate=11500000,bufsize=23000000,g=60,keyint_min=60,threads=16"];
 

@@ -1,10 +1,9 @@
-
 import sys, os
 
 RIFE_PLAYER_MLRT_SCRIPT_PATH =  os.getenv("RIFE_PLAYER_MLRT_SCRIPT_PATH")
 sys.path+=[RIFE_PLAYER_MLRT_SCRIPT_PATH]
 # print = lambda *args: 1 if os.getenv("vs_silent") else print
-# print("os.getenv('vs_silent')", os.getenv("vs_silent"), "--------------------------------------------")
+#print("os.getenv('vs_silent')", os.getenv("vs_silent"), "--------------------------------------------")
 
 # print("-----> version" ,sys.version, "----bin", sys.executable, "RIFE_PLAYER_MLRT_SCRIPT_PATH", RIFE_PLAYER_MLRT_SCRIPT_PATH)
 

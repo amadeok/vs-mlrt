@@ -4,7 +4,7 @@ const fs = require('fs');
     
 // Define a route for serving the video file
 app.get('/video', (req, res) => {
-  const videoPath = '/home/amadeok/Downloads/Demon Slayer/01.mp4'; // Path to your video file
+  const videoPath = '/home/user/Downloads/Demon Slayer/01.mp4'; // Path to your video file
   const stat = fs.statSync(videoPath);
   const fileSize = stat.size;
   const range = req.headers.range;

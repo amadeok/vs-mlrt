@@ -131,7 +131,7 @@ import Image from 'next/image'
 
 // const fs = require('fs');
 
-// const filePath = '/home/amadeok/vs-mlrt/scripts/server/server-hls/public/stream/out.m3u8';
+// const filePath = '/home/"/home/user/vs-mlrt/s/vs-mlrt/scripts/server/server-hls/public/stream/out.m3u8';
 
 // fs.watch(filePath, (event, filename) => {
 //   console.log(event)

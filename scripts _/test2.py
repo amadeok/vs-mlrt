@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/amadeok/vs-mlrt/scripts/")
+sys.path.append("/home/user/vs-mlrt/scripts/")
 import random
 from vsmlrt import RIFE, RIFEModel, Backend
 import vapoursynth as vs, os, numpy as np, cv2, ctypes, time
@@ -8,7 +8,7 @@ core = vs.core
 
 import vapoursynth as vs
 core = vs.core
-video_file_path = "/home/amadeok/Downloads/Demon Slayer (Kimetsu no Yaiba) [KaiDubs] [AS] [CC] [720p]/Demon Slayer - 01 - Cruelty [KaiDubs] [720p].mp4"
+video_file_path = ""
 try:
   core.std.LoadPlugin(path="/usr/lib/x86_64-linux-gnu/libffms2.so")
 except Exception as e:
@@ -40,7 +40,6 @@ print(clip_rgbh.format)
 #  - GPU Backend.TRT(fp16=True, device_id=0, num_streams=1): TensorRT runtime, the fastest NV GPU runtime.
 model = RIFEModel.v4_6
 multi =2
-#model = "/home/amadeok/vs-mlrt/vstrt/build/models/rife/72f.engine"
 flt = RIFE(clip_rgbh, model=model, backend=Backend.TRT(), multi=multi)
 print("rife")
 final = core.resize.Bicubic(flt,  format=vs.YUV444P16,  filter_param_a=1, filter_param_b=0)

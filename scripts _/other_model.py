@@ -1,14 +1,18 @@
+import os
+os.environ["RIFE_PLAYER_TRT_DLL_PATH"] = os.path.expanduser("~") + r"\rifef _\mlrt_latest\vsmlrt-windows-x64-tensorrt.v15.6\vstrt.dll"
+
 import random
 from vsmlrt import RIFE, RIFEModel, Backend
 import vapoursynth as vs, os, numpy as np, cv2, ctypes, time
 core = vs.core
 #src = core.std.BlankClip(format=vs.RGBS)
 
+
 import vapoursynth as vs
-core = vs.core
-video_file_path= r"C:\Users\%username%\Videos\002_sky pm 12 30.mkv"
+core = vs.core#
+video_file_path=  os.path.expanduser("~") + r"\Videos\2025-08-17 04-24-23.mkv"
 try:
-   p =  os.path.expanduser("~") +  r"rifef\ffms2-2.40-msvc\x64\ffms2.dll"
+   p =  os.path.expanduser("~") +  r"\rifef _\ffms2-2.40-msvc\x64\ffms2.dll"
    if os.path.isfile(p):
       core.std.LoadPlugin(path=p)
    else:
@@ -28,25 +32,18 @@ rgb = core.resize.Bicubic(clip=clip,   format=vs.RGB24, matrix_in_s="709", trans
 generator = rgb.frames()
 print(rgb.format)
 
-# clip_rgbh = rgb.std.SetFrameProp(prop="_FieldBased", intval=1)
-# clip_rgbh = rgb.resize.Point(format=vs.RGBH, matrix_in_s="709", matrix_s="709")
 clip_rgbh = core.resize.Bicubic(clip=clip, format=vs.RGBH, matrix_in_s="709", transfer_in_s="709", width=1280, height=704  )
 
 print(clip_rgbh.format)
+import vsmlrt
+output = vsmlrt.inference(clip_rgbh, r"F:\all\GitHub\depth-anything-tensorrt\depth_anything_v2_vitb.onnx", backend=vsmlrt.Backend.TRT(fp16=True))
 
-# backend could be:
-#  - CPU Backend.OV_CPU(): the recommended CPU backend; generally faster than ORT-CPU.
-#  - CPU Backend.ORT_CPU(num_streams=1, verbosity=2): vs-ort cpu backend.
-#  - GPU Backend.ORT_CUDA(device_id=0, cudnn_benchmark=True, num_streams=1, verbosity=2)
-#     - use device_id to select device
-#     - set cudnn_benchmark=False to reduce script reload latency when debugging, but with slight throughput performance penalty.
-#  - GPU Backend.TRT(fp16=True, device_id=0, num_streams=1): TensorRT runtime, the fastest NV GPU runtime.
-model = RIFEModel.v4_6
-multi =5
-flt = RIFE(clip_rgbh, model=model, backend=Backend.TRT(), multi=multi)
-print("rife")
+# model = RIFEModel.v4_6
+# multi =5
+# flt = RIFE(clip_rgbh, model=model, backend=Backend.TRT(), multi=multi)
+# print("rife")
 
-rgb2 = core.resize.Bicubic(clip=flt,   format=vs.RGB24, matrix_in_s="709", transfer_in_s="709", width=1280, height=704 )
+rgb2 = core.resize.Bicubic(clip=output,   format=vs.RGB24, matrix_in_s="709", transfer_in_s="709", width=1280, height=704 )
 gen = rgb2.frames()
 
 ind = 1200 * 5/2
